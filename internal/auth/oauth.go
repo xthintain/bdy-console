@@ -86,11 +86,17 @@ func (o OAuth) Refresh(ctx context.Context, cfg config.Config) (config.Config, e
 	cfg.AccessToken = tok.AccessToken
 	cfg.RefreshToken = tok.RefreshToken
 	cfg.ExpiresAt = time.Now().Add(time.Duration(tok.ExpiresIn) * time.Second)
+	if cfg.IsTemporaryReadOnly() {
+		if cfg.ExpiresAt.After(cfg.TemporaryExpiresAt) {
+			cfg.ExpiresAt = cfg.TemporaryExpiresAt
+		}
+		return cfg, config.SaveTemporary(cfg)
+	}
 	return cfg, config.Save(cfg)
 }
 
 func EnsureToken(ctx context.Context) (config.Config, error) {
-	cfg, err := config.Load()
+	cfg, err := config.LoadActive()
 	if err != nil {
 		return cfg, err
 	}

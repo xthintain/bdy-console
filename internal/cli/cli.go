@@ -9,6 +9,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -19,7 +20,7 @@ import (
 	"baiduyunStorage/internal/repo"
 )
 
-const version = "dev"
+var version = "dev"
 
 type globalOptions struct {
 	CWD   string
@@ -63,6 +64,10 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	restore := applyGlobalOptions(opts)
 	defer restore()
 	ctx := context.Background()
+	if err := enforceTemporaryReadOnly(args); err != nil {
+		fmt.Fprintln(stderr, "error:", err)
+		return 1
+	}
 	if err := run(ctx, args, stdout); err != nil {
 		fmt.Fprintln(stderr, "error:", err)
 		return 1
@@ -170,6 +175,79 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 	default:
 		return fmt.Errorf("unknown command %q", args[0])
 	}
+}
+
+var errTemporaryReadOnlyWrite = errors.New("temporary read-only auth forbids write operation")
+
+func enforceTemporaryReadOnly(args []string) error {
+	cfg, err := config.LoadActive()
+	if err != nil {
+		return err
+	}
+	if !cfg.IsTemporaryReadOnly() {
+		return nil
+	}
+	if temporaryReadOnlyAllows(args) {
+		return nil
+	}
+	return errTemporaryReadOnlyWrite
+}
+
+func temporaryReadOnlyAllows(args []string) bool {
+	if len(args) == 0 {
+		return true
+	}
+	switch args[0] {
+	case "help":
+		return true
+	case "auth":
+		return true
+	case "cmd":
+		return len(args) > 1 && oneOf(args[1], "cd", "pwd", "ls", "ll", "la", "find", "grep", "cat", "history")
+	case "home":
+		if len(args) < 2 {
+			return false
+		}
+		if args[1] == "cmd" {
+			return len(args) > 2 && oneOf(args[2], "ls", "ll", "la", "find", "grep", "cat")
+		}
+		return oneOf(args[1], "ls", "ll", "la", "find", "grep", "cat")
+	case "nd":
+		return temporaryReadOnlyAllowsND(args[1:])
+	case "lfs":
+		return len(args) > 1 && oneOf(args[1], "fetch", "checkout", "status", "ls-files")
+	case "sync":
+		return len(args) > 1 && oneOf(args[1], "status", "ls", "pull", "remote")
+	case "status", "ls", "pull", "remote":
+		return true
+	default:
+		return false
+	}
+}
+
+func temporaryReadOnlyAllowsND(args []string) bool {
+	if len(args) == 0 {
+		return false
+	}
+	switch args[0] {
+	case "clone", "fetch", "pull", "log", "status", "show", "diff", "index", "search":
+		return true
+	case "lfs":
+		return len(args) > 1 && oneOf(args[1], "fetch", "checkout", "status", "ls-files")
+	case "pack":
+		return len(args) > 1 && args[1] == "fetch"
+	default:
+		return false
+	}
+}
+
+func oneOf(s string, allowed ...string) bool {
+	for _, item := range allowed {
+		if s == item {
+			return true
+		}
+	}
+	return false
 }
 
 func printRootHelp(out io.Writer) {
@@ -355,6 +433,7 @@ func printAuthHelp(out io.Writer) {
 
 Usage:
   bdy auth login
+  bdy auth login --temporary 1d
   bdy auth status
 
 Commands:
@@ -365,7 +444,10 @@ Flow:
   1. Run 'bdy config set-app ...' once with your app credentials.
   2. Run 'bdy auth login'.
   3. Open the printed URL or QR code and approve the basic,netdisk scope.
-  4. Use 'bdy auth status' to verify the saved token.`)
+  4. Use 'bdy auth status' to verify the saved token.
+
+Temporary read-only:
+  bdy auth login --temporary 1d stores ~/.config/bdy/temporary.json and blocks write commands locally.`)
 }
 
 func printHomeHelp(out io.Writer) {
@@ -607,16 +689,41 @@ func cmdAuth(ctx context.Context, args []string, out io.Writer) error {
 	}
 	switch args[0] {
 	case "status":
-		cfg, err := config.Load()
+		cfg, err := config.LoadActive()
 		if err != nil {
 			return err
 		}
 		if !cfg.HasToken() {
 			return errors.New("not logged in or token expired")
 		}
-		fmt.Fprintf(out, "logged in; token expires at %s\n", cfg.ExpiresAt.Format(time.RFC3339))
+		mode := "persistent"
+		if cfg.IsTemporaryReadOnly() {
+			mode = "temporary read-only"
+		}
+		fmt.Fprintf(out, "logged in; mode: %s; token expires at %s", mode, cfg.ExpiresAt.Format(time.RFC3339))
+		if cfg.IsTemporaryReadOnly() {
+			fmt.Fprintf(out, "; temporary expires at %s", cfg.TemporaryExpiresAt.Format(time.RFC3339))
+		}
+		fmt.Fprintln(out)
 		return nil
 	case "login":
+		fs := flag.NewFlagSet("auth login", flag.ContinueOnError)
+		fs.SetOutput(io.Discard)
+		temporary := fs.String("temporary", "", "")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if fs.NArg() != 0 {
+			return errors.New("usage: bdy auth login [--temporary <duration>]")
+		}
+		var temporaryDuration time.Duration
+		var err error
+		if *temporary != "" {
+			temporaryDuration, err = parseTemporaryDuration(*temporary)
+			if err != nil {
+				return err
+			}
+		}
 		cfg, err := config.Load()
 		if err != nil {
 			return err
@@ -643,6 +750,19 @@ func cmdAuth(ctx context.Context, args []string, out io.Writer) error {
 			cfg.AccessToken = tok.AccessToken
 			cfg.RefreshToken = tok.RefreshToken
 			cfg.ExpiresAt = time.Now().Add(time.Duration(tok.ExpiresIn) * time.Second)
+			if temporaryDuration > 0 {
+				cfg.Temporary = true
+				cfg.ReadOnly = true
+				cfg.TemporaryExpiresAt = time.Now().Add(temporaryDuration)
+				if cfg.ExpiresAt.After(cfg.TemporaryExpiresAt) {
+					cfg.ExpiresAt = cfg.TemporaryExpiresAt
+				}
+				if err := config.SaveTemporary(cfg); err != nil {
+					return err
+				}
+				fmt.Fprintf(out, "temporary read-only login complete; expires at %s\n", cfg.TemporaryExpiresAt.Format(time.RFC3339))
+				return nil
+			}
 			if err := config.Save(cfg); err != nil {
 				return err
 			}
@@ -653,6 +773,25 @@ func cmdAuth(ctx context.Context, args []string, out io.Writer) error {
 	default:
 		return errors.New("usage: bdy auth login|status")
 	}
+}
+
+func parseTemporaryDuration(raw string) (time.Duration, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return 0, errors.New("--temporary requires a duration")
+	}
+	if strings.HasSuffix(raw, "d") {
+		n, err := strconv.Atoi(strings.TrimSuffix(raw, "d"))
+		if err != nil || n <= 0 {
+			return 0, fmt.Errorf("invalid temporary duration %q", raw)
+		}
+		return time.Duration(n) * 24 * time.Hour, nil
+	}
+	d, err := time.ParseDuration(raw)
+	if err != nil || d <= 0 {
+		return 0, fmt.Errorf("invalid temporary duration %q", raw)
+	}
+	return d, nil
 }
 
 func cmdInit(args []string, out io.Writer) error {

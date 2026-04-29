@@ -6,6 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	"baiduyunStorage/internal/config"
 )
 
 func TestHelpAndInitStatusSmoke(t *testing.T) {
@@ -122,6 +125,50 @@ func TestGlobalFlags(t *testing.T) {
 	}
 	if got, want := strings.TrimSpace(out.String()), "/apps/baiduyunStorage/git"; got != want {
 		t.Fatalf("pwd=%q want %q", got, want)
+	}
+}
+
+func TestTemporaryReadOnlyAuthBlocksWriteCommands(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("BDY_CONFIG_HOME", dir)
+	cfg := config.Config{
+		AppKey:             "key",
+		SecretKey:          "secret",
+		AccessToken:        "temporary-token",
+		RefreshToken:       "temporary-refresh",
+		ExpiresAt:          time.Now().Add(time.Hour),
+		Temporary:          true,
+		ReadOnly:           true,
+		TemporaryExpiresAt: time.Now().Add(time.Hour),
+	}
+	if err := config.SaveTemporary(cfg); err != nil {
+		t.Fatal(err)
+	}
+	var out, errOut bytes.Buffer
+	if code := Run([]string{"nd", "commit", "-m", "blocked"}, &out, &errOut); code == 0 {
+		t.Fatal("write command unexpectedly succeeded")
+	}
+	if !strings.Contains(errOut.String(), "temporary read-only auth forbids write operation") {
+		t.Fatalf("err=%q", errOut.String())
+	}
+
+	out.Reset()
+	errOut.Reset()
+	if code := Run([]string{"auth", "status"}, &out, &errOut); code != 0 {
+		t.Fatalf("auth status code=%d err=%s", code, errOut.String())
+	}
+	if !strings.Contains(out.String(), "temporary") || !strings.Contains(out.String(), "read-only") {
+		t.Fatalf("status=%q", out.String())
+	}
+}
+
+func TestTemporaryDurationParsesDays(t *testing.T) {
+	d, err := parseTemporaryDuration("1d")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d != 24*time.Hour {
+		t.Fatalf("duration=%s", d)
 	}
 }
 

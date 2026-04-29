@@ -24,6 +24,14 @@ Install as a Linux command:
 sudo install -m 0755 bdy /usr/bin/bdy
 ```
 
+Build a hardened release binary:
+
+```bash
+./scripts/build-secure.sh
+```
+
+The secure build strips symbols, removes build paths, emits a SHA-256 checksum, and uses optional `garble`/`upx` hardening when those tools are installed. No local binary can be made impossible to unpack, but this raises reverse-engineering cost.
+
 ## Authentication
 
 ### Get App Credentials
@@ -79,6 +87,16 @@ Check login status:
 ```bash
 bdy auth status
 ```
+
+Temporary read-only login:
+
+```bash
+bdy auth login --temporary 1d
+```
+
+Temporary auth is stored in `~/.config/bdy/temporary.json`, expires after the requested duration, and is restricted by `bdy` to clone, view, fetch, pull, download, index, and search style commands. Write commands return `temporary read-only auth forbids write operation`.
+
+See [docs/commands.md](docs/commands.md) for the full command reference and read-only policy table.
 
 ## Cloud Command Space
 
