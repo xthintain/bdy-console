@@ -13,11 +13,11 @@ func TestHelpAndInitStatusSmoke(t *testing.T) {
 	if code := Run([]string{"help"}, &out, &errOut); code != 0 {
 		t.Fatalf("help code=%d err=%s", code, errOut.String())
 	}
-	if !strings.Contains(out.String(), "bdy - Git-like") {
+	if !strings.Contains(out.String(), "bdy - Baidu Netdisk command line storage") {
 		t.Fatalf("help output = %q", out.String())
 	}
-	if !strings.Contains(out.String(), "mkdir|touch|vim") {
-		t.Fatalf("help missing new cmd commands: %q", out.String())
+	if !strings.Contains(out.String(), "Spaces:") || !strings.Contains(out.String(), "Run 'bdy <command> --help'") {
+		t.Fatalf("help missing sections: %q", out.String())
 	}
 
 	root := t.TempDir()
@@ -41,6 +41,53 @@ func TestHelpAndInitStatusSmoke(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "clean") {
 		t.Fatalf("status output=%q", out.String())
+	}
+}
+
+func TestDetailedHelp(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want []string
+	}{
+		{
+			name: "cmd help",
+			args: []string{"cmd", "--help"},
+			want: []string{"Usage:", "bdy cmd ls [-al] [path]", "eval \"$(bdy cmd cd git)\"", "mkdir [-p]"},
+		},
+		{
+			name: "lfs help",
+			args: []string{"lfs", "--help"},
+			want: []string{"Git-LFS-style large file storage", "bdy lfs track '<pattern>'", "bdy lfs push", "Remote object root"},
+		},
+		{
+			name: "auth help",
+			args: []string{"auth", "--help"},
+			want: []string{"bdy auth login", "bdy auth status", "device-code"},
+		},
+		{
+			name: "config help",
+			args: []string{"config", "--help"},
+			want: []string{"bdy config set-app", "--app-id", "--sign-key"},
+		},
+		{
+			name: "help command help",
+			args: []string{"help", "cmd"},
+			want: []string{"bdy cmd", "Cloud working directory", "history [-n N]"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var out, errOut bytes.Buffer
+			if code := Run(tt.args, &out, &errOut); code != 0 {
+				t.Fatalf("code=%d err=%s", code, errOut.String())
+			}
+			for _, want := range tt.want {
+				if !strings.Contains(out.String(), want) {
+					t.Fatalf("help output missing %q:\n%s", want, out.String())
+				}
+			}
+		})
 	}
 }
 

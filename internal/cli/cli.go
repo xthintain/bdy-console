@@ -19,8 +19,26 @@ import (
 )
 
 func Run(args []string, stdout, stderr io.Writer) int {
-	if len(args) == 0 || args[0] == "help" || args[0] == "--help" || args[0] == "-h" {
-		printHelp(stdout)
+	if len(args) == 0 || isHelpArg(args[0]) {
+		printRootHelp(stdout)
+		return 0
+	}
+	if args[0] == "help" {
+		topic := ""
+		if len(args) > 1 {
+			topic = args[1]
+		}
+		if err := printHelpTopic(stdout, topic); err != nil {
+			fmt.Fprintln(stderr, "error:", err)
+			return 1
+		}
+		return 0
+	}
+	if len(args) > 1 && isHelpArg(args[1]) {
+		if err := printHelpTopic(stdout, args[0]); err != nil {
+			fmt.Fprintln(stderr, "error:", err)
+			return 1
+		}
 		return 0
 	}
 	ctx := context.Background()
@@ -29,6 +47,10 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	return 0
+}
+
+func isHelpArg(arg string) bool {
+	return arg == "--help" || arg == "-h"
 }
 
 func run(ctx context.Context, args []string, out io.Writer) error {
@@ -68,15 +90,209 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 	}
 }
 
-func printHelp(out io.Writer) {
-	fmt.Fprintln(out, `bdy - Git-like snapshot sync for Baidu Netdisk
+func printRootHelp(out io.Writer) {
+	fmt.Fprintln(out, `bdy - Baidu Netdisk command line storage
+
+Usage:
+  bdy <command> [args]
+  bdy help [command]
+  bdy <command> --help
+
+Spaces:
+  cmd      Manage files under /apps/baiduyunStorage
+  lfs      Store Git-LFS-style large objects under /apps/baiduyunStorage/lfs
+  home     Inspect the whole Baidu Netdisk only when explicitly requested
+  sync     Snapshot sync commands under an isolated remote workspace
+
+Core commands:
+  config   Configure Baidu Open Platform application credentials
+  auth     Login with Baidu OAuth device-code flow and check token status
+  cmd      Bash-style cloud file commands: ls, find, grep, rm, cat, mkdir, touch, vim
+  lfs      Git-LFS-style large file commands: track, push, fetch, checkout, pull
+  home     Whole-netdisk inspection commands
+  init     Initialize snapshot sync metadata in the current directory
+  status   Show local snapshot sync status
+  add      Stage paths for snapshot sync
+  commit   Commit a snapshot
+  push     Upload committed snapshot changes
+  pull     Download remote snapshot changes
+  ls       List snapshot sync remote files
+  rm       Remove local paths and stage removals
+  mv       Move local paths and stage moves
+  remote   Show snapshot sync remote root
+
+Run 'bdy <command> --help' for detailed command help.
+Examples:
+  bdy config set-app --app-id ID --app-key KEY --secret-key SECRET --sign-key SIGN
+  bdy auth login
+  bdy cmd ls -al
+  eval "$(bdy cmd cd git)"
+  bdy lfs track '*.zip'
+  bdy init
+  bdy add README.md && bdy commit -m 'snapshot' && bdy push`)
+}
+
+func printHelpTopic(out io.Writer, topic string) error {
+	switch topic {
+	case "", "help":
+		printRootHelp(out)
+	case "config":
+		printConfigHelp(out)
+	case "auth":
+		printAuthHelp(out)
+	case "home":
+		printHomeHelp(out)
+	case "cmd":
+		printCmdHelp(out)
+	case "lfs":
+		printLFSHelp(out)
+	case "init", "status", "add", "commit", "push", "pull", "ls", "rm", "mv", "remote", "sync":
+		printSyncHelp(out)
+	default:
+		return fmt.Errorf("unknown help topic %q", topic)
+	}
+	return nil
+}
+
+func printConfigHelp(out io.Writer) {
+	fmt.Fprintln(out, `bdy config - configure local Baidu Open Platform credentials
 
 Usage:
   bdy config set-app --app-id ID --app-key KEY --secret-key SECRET [--sign-key SIGN]
-  bdy auth login|status
+
+Options:
+  --app-id       Baidu Netdisk Open Platform AppID
+  --app-key      OAuth client ID / AppKey
+  --secret-key   OAuth client secret / SecretKey
+  --sign-key     Application SignKey when your API flow needs it
+
+Config file:
+  ~/.config/bdy/config.json
+
+The config file may contain app credentials, access tokens, and refresh tokens.
+Keep it private and never commit it.`)
+}
+
+func printAuthHelp(out io.Writer) {
+	fmt.Fprintln(out, `bdy auth - Baidu OAuth login and token status
+
+Usage:
+  bdy auth login
+  bdy auth status
+
+Commands:
+  login    Start the OAuth device-code flow, print the verification URL, user code, and QR URL
+  status   Check whether a valid token is saved locally
+
+Flow:
+  1. Run 'bdy config set-app ...' once with your app credentials.
+  2. Run 'bdy auth login'.
+  3. Open the printed URL or QR code and approve the basic,netdisk scope.
+  4. Use 'bdy auth status' to verify the saved token.`)
+}
+
+func printHomeHelp(out io.Writer) {
+	fmt.Fprintln(out, `bdy home - explicit whole-netdisk inspection
+
+Usage:
   bdy home ls [path]
-  bdy cmd cd|pwd|ls|ll|la|find|grep|rm|delete|history|cat|mkdir|touch|vim
-  bdy lfs install|track|untrack|status|ls-files|push|fetch|pull|checkout|clean|smudge
+
+Examples:
+  bdy home ls /
+  bdy home ls /apps
+  bdy home ls /Document
+
+Normal 'cmd', 'lfs', and snapshot sync commands stay under /apps/baiduyunStorage.
+Use 'home' only when you intentionally want to inspect the whole Baidu Netdisk.`)
+}
+
+func printCmdHelp(out io.Writer) {
+	fmt.Fprintln(out, `bdy cmd - bash-style cloud file commands
+
+Root:
+  /apps/baiduyunStorage
+
+Usage:
+  bdy cmd pwd
+  bdy cmd cd [path]
+  bdy cmd ls [-a] [-l] [path]
+  bdy cmd ls [-al] [path]
+  bdy cmd ls [-la] [path]
+  bdy cmd ll [path]
+  bdy cmd la [path]
+  bdy cmd find [-name pattern] [-type f|d] [pattern] [path]
+  bdy cmd grep [-i] [-v] [-type f|d] <pattern> [path]
+  bdy cmd rm [-r] [-f] <path...>
+  bdy cmd delete [-r] [-f] <path...>
+  bdy cmd history [-n N]
+  bdy cmd history -c
+  bdy cmd cat [-n] <path...>
+  bdy cmd mkdir [-p] <path...>
+  bdy cmd touch [-c] <path...>
+  bdy cmd vim <path>
+
+Cloud working directory:
+  eval "$(bdy cmd cd git)"
+  bdy cmd pwd
+
+'cd' exports BDY_CMD_CWD for the current shell only. A new terminal without that
+environment variable returns to /apps/baiduyunStorage.
+
+Examples:
+  bdy cmd ls -al
+  bdy cmd mkdir -p notes/archive
+  bdy cmd touch notes/today.txt
+  bdy cmd cat -n notes/today.txt
+  bdy cmd find -name '.*\.txt$' -type f
+  bdy cmd grep -i report notes
+  bdy cmd rm -rf notes/archive
+  bdy cmd history -n 20
+
+Notes:
+  find and grep search remote path and filename metadata, not file contents.
+  vim downloads a temporary copy, opens $EDITOR or vim, and uploads it back.`)
+}
+
+func printLFSHelp(out io.Writer) {
+	fmt.Fprintln(out, `bdy lfs - Git-LFS-style large file storage
+
+Usage:
+  bdy lfs install
+  bdy lfs track '<pattern>'
+  bdy lfs untrack '<pattern>'
+  bdy lfs status
+  bdy lfs ls-files
+  bdy lfs push
+  bdy lfs fetch
+  bdy lfs checkout
+  bdy lfs pull
+
+Git filter commands:
+  bdy lfs clean -- <path>
+  bdy lfs smudge -- <path>
+
+Remote object root:
+  /apps/baiduyunStorage/lfs
+
+Local cache:
+  .bdy/lfs/objects
+
+Examples:
+  bdy lfs install
+  bdy lfs track '*.zip'
+  git add .gitattributes large.zip
+  git commit -m 'track large file'
+  bdy lfs push
+  bdy lfs pull
+
+Git stores pointer files. Real contents are cached locally and uploaded to Baidu
+Netdisk by SHA-256 object ID.`)
+}
+
+func printSyncHelp(out io.Writer) {
+	fmt.Fprintln(out, `bdy snapshot sync - lightweight manifest-based folder sync
+
+Usage:
   bdy init [--remote-root /apps/baiduyunStorage/workspace]
   bdy status
   bdy add <path...>
@@ -86,7 +302,19 @@ Usage:
   bdy ls [remote-path]
   bdy rm <path...>
   bdy mv <old> <new>
-  bdy remote`)
+  bdy remote
+
+Examples:
+  bdy init
+  bdy status
+  bdy add notes.txt docs
+  bdy commit -m 'snapshot'
+  bdy push
+  bdy pull
+
+This is not a full Git database. It stores snapshots and manifests under .bdy/
+locally and syncs them to an isolated remote root. Use 'bdy lfs' for true large
+file object storage.`)
 }
 
 func cmdLFS(ctx context.Context, args []string, out io.Writer) error {
