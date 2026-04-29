@@ -136,6 +136,17 @@ func TestBdyNDRemoteSetURL(t *testing.T) {
 	}
 }
 
+func TestBdyNDCloneRequiresRemote(t *testing.T) {
+	var out, errOut bytes.Buffer
+	code := Run([]string{"nd", "clone"}, &out, &errOut)
+	if code == 0 {
+		t.Fatal("clone without remote unexpectedly succeeded")
+	}
+	if !strings.Contains(errOut.String(), "usage: bdy nd clone <remote> [dir]") {
+		t.Fatalf("err=%q", errOut.String())
+	}
+}
+
 func mustRunCLI(t *testing.T, args []string, out, errOut *bytes.Buffer) {
 	t.Helper()
 	out.Reset()

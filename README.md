@@ -229,7 +229,7 @@ Local repository state is stored under:
 .bdynd/
 ```
 
-The implemented commands include `init`, `add`, `commit`, `status`, `log`, `show`, `branch`, `switch`, `checkout`, `tag`, `remote`, `push`, `fetch`, and `pull`. Built-in `nd lfs` tracking and object sync are available. Clone, merge, and advanced porcelain are planned in `docs/superpowers/plans/2026-04-29-bdy-nd-lfs.md`.
+The implemented commands include `init`, `add`, `commit`, `status`, `log`, `show`, `branch`, `switch`, `checkout`, `tag`, `remote`, `push`, `fetch`, `pull`, and `clone`. Built-in `nd lfs` tracking and object sync are available. Merge and advanced porcelain are planned in `docs/superpowers/plans/2026-04-29-bdy-nd-lfs.md`.
 
 Branch and tag commands are also available:
 
@@ -243,6 +243,7 @@ bdy nd remote set-url origin /apps/baiduyunStorage/nd/repos/demo
 bdy nd push
 bdy nd fetch
 bdy nd pull
+bdy nd clone /apps/baiduyunStorage/nd/repos/demo demo-clone
 ```
 
 Large files can be tracked by the built-in `nd lfs` layer:

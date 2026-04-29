@@ -17,7 +17,7 @@ import (
 
 func cmdND(ctx context.Context, args []string, out io.Writer) error {
 	if len(args) == 0 {
-		return errors.New("usage: bdy nd init|status|add|commit|log|show|branch|switch|checkout|tag|lfs|remote|push|fetch|pull|diff|rm|mv|restore|reset")
+		return errors.New("usage: bdy nd init|status|add|commit|log|show|branch|switch|checkout|tag|lfs|remote|push|fetch|pull|clone|diff|rm|mv|restore|reset")
 	}
 	switch args[0] {
 	case "init":
@@ -200,10 +200,28 @@ func cmdND(ctx context.Context, args []string, out io.Writer) error {
 			fmt.Fprintln(out, "pull complete")
 		}
 		return nil
+	case "clone":
+		if len(args) < 2 || len(args) > 3 {
+			return errors.New("usage: bdy nd clone <remote> [dir]")
+		}
+		cfg, err := auth.EnsureToken(ctx)
+		if err != nil {
+			return err
+		}
+		dest := ""
+		if len(args) == 3 {
+			dest = args[2]
+		}
+		r, err := bdynd.Clone(ctx, ndRemoteStore{client: baidu.NewClient(cfg)}, args[1], dest)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(out, "cloned %s into %s\n", args[1], r.Root)
+		return nil
 	case "diff", "rm", "mv", "restore", "reset":
 		return fmt.Errorf("bdy nd %s is planned but not implemented yet", args[0])
 	default:
-		return errors.New("usage: bdy nd init|status|add|commit|log|show|branch|switch|checkout|tag|lfs|remote|push|fetch|pull|diff|rm|mv|restore|reset")
+		return errors.New("usage: bdy nd init|status|add|commit|log|show|branch|switch|checkout|tag|lfs|remote|push|fetch|pull|clone|diff|rm|mv|restore|reset")
 	}
 }
 
@@ -384,6 +402,7 @@ Usage:
   bdy nd push
   bdy nd fetch
   bdy nd pull
+  bdy nd clone <remote> [dir]
   bdy nd lfs track <pattern...>
   bdy nd lfs untrack <pattern...>
   bdy nd lfs status
@@ -399,8 +418,7 @@ Repository:
 Remote object root:
   /apps/baiduyunStorage/nd/repos/<repo-name>
 
-Commands such as lfs push/pull, clone, merge, and stash are planned in the bdy
-nd implementation plan.`)
+Commands such as merge and stash are planned in the bdy nd implementation plan.`)
 }
 
 func printNDStatus(out io.Writer, st bdynd.StatusResult) {

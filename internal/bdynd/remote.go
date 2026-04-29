@@ -140,6 +140,27 @@ func Pull(ctx context.Context, r Repo, remote RemoteStore, remoteName string) er
 	return UpdateHead(r, remoteOID)
 }
 
+func Clone(ctx context.Context, remote RemoteStore, remoteRoot, dest string) (Repo, error) {
+	remoteRoot = strings.TrimRight(strings.TrimSpace(remoteRoot), "/")
+	if remoteRoot == "" {
+		return Repo{}, fmt.Errorf("remote root is required")
+	}
+	if dest == "" {
+		dest = filepath.Base(remoteRoot)
+	}
+	if err := os.MkdirAll(dest, 0o755); err != nil {
+		return Repo{}, err
+	}
+	r, err := Init(dest, InitOptions{RemoteName: DefaultRemote, RemoteRoot: remoteRoot})
+	if err != nil {
+		return Repo{}, err
+	}
+	if err := Pull(ctx, r, remote, DefaultRemote); err != nil {
+		return Repo{}, err
+	}
+	return r, nil
+}
+
 func RemoteRefPath(remoteRoot, ref string) string {
 	return strings.TrimRight(remoteRoot, "/") + "/" + strings.TrimPrefix(ref, "/")
 }
