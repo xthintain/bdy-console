@@ -290,7 +290,7 @@ func cmdND(ctx context.Context, args []string, out io.Writer) error {
 	case "reset":
 		return cmdNDReset(args[1:], out)
 	case "pack":
-		return cmdNDPack(args[1:], out)
+		return cmdNDPack(ctx, args[1:], out)
 	case "index":
 		return cmdNDIndex(args[1:], out)
 	default:
@@ -298,7 +298,45 @@ func cmdND(ctx context.Context, args []string, out io.Writer) error {
 	}
 }
 
-func cmdNDPack(args []string, out io.Writer) error {
+func cmdNDPack(ctx context.Context, args []string, out io.Writer) error {
+	if len(args) > 0 {
+		switch args[0] {
+		case "push":
+			if len(args) != 1 {
+				return errors.New("usage: bdy nd pack push")
+			}
+			r, err := bdynd.Open(".")
+			if err != nil {
+				return err
+			}
+			store, remoteRoot, err := ndBaiduRemote(ctx, r)
+			if err != nil {
+				return err
+			}
+			if err := bdynd.PushPacks(ctx, r, store, remoteRoot); err != nil {
+				return err
+			}
+			fmt.Fprintln(out, "pack push complete")
+			return nil
+		case "fetch":
+			if len(args) < 2 {
+				return errors.New("usage: bdy nd pack fetch <id...>")
+			}
+			r, err := bdynd.Open(".")
+			if err != nil {
+				return err
+			}
+			store, remoteRoot, err := ndBaiduRemote(ctx, r)
+			if err != nil {
+				return err
+			}
+			if err := bdynd.FetchPacks(ctx, r, store, remoteRoot, args[1:]); err != nil {
+				return err
+			}
+			fmt.Fprintln(out, "pack fetch complete")
+			return nil
+		}
+	}
 	fs := flag.NewFlagSet("nd pack", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	name := fs.String("name", "", "")
@@ -605,6 +643,8 @@ Usage:
   bdy nd restore <path...>
   bdy nd reset [--soft|--mixed|--hard] <ref>
   bdy nd pack [--name <name>] [ref]
+  bdy nd pack push
+  bdy nd pack fetch <id...>
   bdy nd index
   bdy nd branch [name]
   bdy nd switch <branch>

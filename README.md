@@ -257,6 +257,8 @@ For high-throughput data storage, pack a committed snapshot into a single local 
 ```bash
 bdy nd pack --name batch-001
 bdy nd index
+bdy nd pack push
+bdy nd pack fetch 20260429055009-7b4c0a60da9d
 ```
 
 Pack files live under:
@@ -266,6 +268,14 @@ Pack files live under:
 ```
 
 `pack` is intended for batch object/database-style workloads where many files should be uploaded later as fewer large objects. `index` reads local pack manifests; it does not scan Baidu Netdisk.
+
+Remote pack sync stores files under:
+
+```text
+/apps/baiduyunStorage/nd/repos/<repo-name>/packs/
+```
+
+`pack push` uploads all local pack files and manifests that are not already present remotely. `pack fetch` currently fetches explicit pack IDs; use `bdy nd index` after fetching to inspect local manifests.
 
 Temporarily save dirty worktree changes without creating a commit:
 
