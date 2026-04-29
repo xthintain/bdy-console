@@ -17,6 +17,15 @@
 config.local.json
 config.private.json
 
+# Local agent/model instructions and runtime state
+AGENTS.md
+CLAUDE.md
+.codex/
+.codex*
+.agents/
+.cursor/
+.cursorrules
+
 # Build outputs
 /bdy
 /dist/
