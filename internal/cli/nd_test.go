@@ -288,6 +288,32 @@ func TestBdyNDPackAndIndex(t *testing.T) {
 	}
 }
 
+func TestBdyNDSearchPackIndex(t *testing.T) {
+	root := t.TempDir()
+	old, _ := os.Getwd()
+	t.Cleanup(func() { _ = os.Chdir(old) })
+	if err := os.Chdir(root); err != nil {
+		t.Fatal(err)
+	}
+	var out, errOut bytes.Buffer
+	mustRunCLI(t, []string{"nd", "init"}, &out, &errOut)
+	if err := os.WriteFile("report.txt", []byte("payload\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile("image.png", []byte("png\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mustRunCLI(t, []string{"nd", "add", "report.txt", "image.png"}, &out, &errOut)
+	mustRunCLI(t, []string{"nd", "commit", "-m", "data"}, &out, &errOut)
+	mustRunCLI(t, []string{"nd", "pack", "--name", "batch"}, &out, &errOut)
+
+	out.Reset()
+	mustRunCLI(t, []string{"nd", "search", "--type", "txt", "--name", "report", "--since", "2000-01-01"}, &out, &errOut)
+	if !strings.Contains(out.String(), "report.txt") || strings.Contains(out.String(), "image.png") {
+		t.Fatalf("search output=%q", out.String())
+	}
+}
+
 func mustRunCLI(t *testing.T, args []string, out, errOut *bytes.Buffer) {
 	t.Helper()
 	out.Reset()

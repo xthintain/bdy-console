@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"baiduyunStorage/internal/auth"
 	"baiduyunStorage/internal/baidu"
@@ -17,7 +18,7 @@ import (
 
 func cmdND(ctx context.Context, args []string, out io.Writer) error {
 	if len(args) == 0 {
-		return errors.New("usage: bdy nd init|status|add|commit|log|show|branch|switch|checkout|tag|lfs|remote|push|fetch|pull|clone|merge|stash|diff|rm|mv|restore|reset|pack|index")
+		return errors.New("usage: bdy nd init|status|add|commit|log|show|branch|switch|checkout|tag|lfs|remote|push|fetch|pull|clone|merge|stash|diff|rm|mv|restore|reset|pack|index|search")
 	}
 	switch args[0] {
 	case "init":
@@ -293,9 +294,64 @@ func cmdND(ctx context.Context, args []string, out io.Writer) error {
 		return cmdNDPack(ctx, args[1:], out)
 	case "index":
 		return cmdNDIndex(args[1:], out)
+	case "search":
+		return cmdNDSearch(args[1:], out)
 	default:
-		return errors.New("usage: bdy nd init|status|add|commit|log|show|branch|switch|checkout|tag|lfs|remote|push|fetch|pull|clone|merge|stash|diff|rm|mv|restore|reset|pack|index")
+		return errors.New("usage: bdy nd init|status|add|commit|log|show|branch|switch|checkout|tag|lfs|remote|push|fetch|pull|clone|merge|stash|diff|rm|mv|restore|reset|pack|index|search")
 	}
+}
+
+func cmdNDSearch(args []string, out io.Writer) error {
+	fs := flag.NewFlagSet("nd search", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	typ := fs.String("type", "", "")
+	name := fs.String("name", "", "")
+	sinceRaw := fs.String("since", "", "")
+	untilRaw := fs.String("until", "", "")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 0 {
+		return errors.New("usage: bdy nd search [--type <ext>] [--name <text>] [--since <date>] [--until <date>]")
+	}
+	since, err := parseSearchTime(*sinceRaw)
+	if err != nil {
+		return err
+	}
+	until, err := parseSearchTime(*untilRaw)
+	if err != nil {
+		return err
+	}
+	r, err := bdynd.Open(".")
+	if err != nil {
+		return err
+	}
+	results, err := bdynd.SearchPacks(r, bdynd.SearchOptions{Type: *typ, Name: *name, Since: since, Until: until})
+	if err != nil {
+		return err
+	}
+	for _, result := range results {
+		packName := result.PackName
+		if packName == "" {
+			packName = "-"
+		}
+		fmt.Fprintf(out, "%s %s %s %s %d %s\n", result.CreatedAt.Format(time.RFC3339), result.PackID, packName, result.Kind, result.Size, result.Path)
+	}
+	return nil
+}
+
+func parseSearchTime(raw string) (time.Time, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return time.Time{}, nil
+	}
+	for _, layout := range []string{time.RFC3339, "2006-01-02"} {
+		t, err := time.Parse(layout, raw)
+		if err == nil {
+			return t, nil
+		}
+	}
+	return time.Time{}, fmt.Errorf("invalid date %q; use YYYY-MM-DD or RFC3339", raw)
 }
 
 func cmdNDPack(ctx context.Context, args []string, out io.Writer) error {
@@ -646,6 +702,7 @@ Usage:
   bdy nd pack push
   bdy nd pack fetch <id...>
   bdy nd index
+  bdy nd search [--type <ext>] [--name <text>] [--since <date>] [--until <date>]
   bdy nd branch [name]
   bdy nd switch <branch>
   bdy nd checkout <ref>

@@ -257,6 +257,7 @@ For high-throughput data storage, pack a committed snapshot into a single local 
 ```bash
 bdy nd pack --name batch-001
 bdy nd index
+bdy nd search --type txt --name report --since 2026-01-01
 bdy nd pack push
 bdy nd pack fetch 20260429055009-7b4c0a60da9d
 ```
@@ -267,7 +268,17 @@ Pack files live under:
 .bdynd/packs/
 ```
 
-`pack` is intended for batch object/database-style workloads where many files should be uploaded later as fewer large objects. `index` reads local pack manifests; it does not scan Baidu Netdisk.
+`pack` is intended for batch object/database-style workloads where many files should be uploaded later as fewer large objects. `index` and `search` read local pack manifests; they do not scan Baidu Netdisk.
+
+Search filters:
+
+```bash
+bdy nd search --type txt
+bdy nd search --name report
+bdy nd search --since 2026-01-01 --until 2026-12-31
+```
+
+`--type` matches file extensions, `--name` matches filename substrings case-insensitively, and `--since`/`--until` filter by the pack manifest creation time. Dates accept `YYYY-MM-DD` or RFC3339.
 
 Remote pack sync stores files under:
 
