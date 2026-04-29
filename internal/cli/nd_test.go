@@ -209,6 +209,58 @@ func TestBdyNDStashPushListPop(t *testing.T) {
 	}
 }
 
+func TestBdyNDWorktreePorcelain(t *testing.T) {
+	root := t.TempDir()
+	old, _ := os.Getwd()
+	t.Cleanup(func() { _ = os.Chdir(old) })
+	if err := os.Chdir(root); err != nil {
+		t.Fatal(err)
+	}
+	var out, errOut bytes.Buffer
+	mustRunCLI(t, []string{"nd", "init"}, &out, &errOut)
+	if err := os.WriteFile("note.txt", []byte("base\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mustRunCLI(t, []string{"nd", "add", "note.txt"}, &out, &errOut)
+	mustRunCLI(t, []string{"nd", "commit", "-m", "base"}, &out, &errOut)
+
+	if err := os.WriteFile("note.txt", []byte("dirty\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	mustRunCLI(t, []string{"nd", "diff"}, &out, &errOut)
+	if !strings.Contains(out.String(), "M  note.txt") {
+		t.Fatalf("diff=%q", out.String())
+	}
+	mustRunCLI(t, []string{"nd", "restore", "note.txt"}, &out, &errOut)
+	if got, err := os.ReadFile("note.txt"); err != nil || string(got) != "base\n" {
+		t.Fatalf("restore note=%q err=%v", got, err)
+	}
+
+	if err := os.WriteFile("old.txt", []byte("old\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mustRunCLI(t, []string{"nd", "add", "old.txt"}, &out, &errOut)
+	mustRunCLI(t, []string{"nd", "mv", "old.txt", "new.txt"}, &out, &errOut)
+	if got, err := os.ReadFile("new.txt"); err != nil || string(got) != "old\n" {
+		t.Fatalf("mv new=%q err=%v", got, err)
+	}
+	mustRunCLI(t, []string{"nd", "rm", "new.txt"}, &out, &errOut)
+	if _, err := os.Stat("new.txt"); !os.IsNotExist(err) {
+		t.Fatalf("new.txt still exists err=%v", err)
+	}
+
+	if err := os.WriteFile("note.txt", []byte("second\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mustRunCLI(t, []string{"nd", "add", "note.txt"}, &out, &errOut)
+	mustRunCLI(t, []string{"nd", "commit", "-m", "second"}, &out, &errOut)
+	mustRunCLI(t, []string{"nd", "reset", "--hard", "HEAD~1"}, &out, &errOut)
+	if got, err := os.ReadFile("note.txt"); err != nil || string(got) != "base\n" {
+		t.Fatalf("reset note=%q err=%v", got, err)
+	}
+}
+
 func mustRunCLI(t *testing.T, args []string, out, errOut *bytes.Buffer) {
 	t.Helper()
 	out.Reset()

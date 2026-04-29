@@ -237,11 +237,94 @@ func cmdND(ctx context.Context, args []string, out io.Writer) error {
 		return err
 	case "stash":
 		return cmdNDStash(args[1:], out)
-	case "diff", "rm", "mv", "restore", "reset":
-		return fmt.Errorf("bdy nd %s is planned but not implemented yet", args[0])
+	case "diff":
+		r, err := bdynd.Open(".")
+		if err != nil {
+			return err
+		}
+		diff, err := bdynd.Diff(r)
+		if err != nil {
+			return err
+		}
+		printNDStatus(out, diff)
+		return nil
+	case "rm":
+		if len(args) < 2 {
+			return errors.New("usage: bdy nd rm <path...>")
+		}
+		r, err := bdynd.Open(".")
+		if err != nil {
+			return err
+		}
+		if err := bdynd.Remove(r, args[1:]); err != nil {
+			return err
+		}
+		fmt.Fprintf(out, "removed %d path(s)\n", len(args)-1)
+		return nil
+	case "mv":
+		if len(args) != 3 {
+			return errors.New("usage: bdy nd mv <old> <new>")
+		}
+		r, err := bdynd.Open(".")
+		if err != nil {
+			return err
+		}
+		if err := bdynd.Move(r, args[1], args[2]); err != nil {
+			return err
+		}
+		fmt.Fprintf(out, "moved %s -> %s\n", args[1], args[2])
+		return nil
+	case "restore":
+		if len(args) < 2 {
+			return errors.New("usage: bdy nd restore <path...>")
+		}
+		r, err := bdynd.Open(".")
+		if err != nil {
+			return err
+		}
+		if err := bdynd.Restore(r, args[1:]); err != nil {
+			return err
+		}
+		fmt.Fprintf(out, "restored %d path(s)\n", len(args)-1)
+		return nil
+	case "reset":
+		return cmdNDReset(args[1:], out)
 	default:
 		return errors.New("usage: bdy nd init|status|add|commit|log|show|branch|switch|checkout|tag|lfs|remote|push|fetch|pull|clone|merge|stash|diff|rm|mv|restore|reset")
 	}
+}
+
+func cmdNDReset(args []string, out io.Writer) error {
+	fs := flag.NewFlagSet("nd reset", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	soft := fs.Bool("soft", false, "")
+	mixed := fs.Bool("mixed", false, "")
+	hard := fs.Bool("hard", false, "")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 1 {
+		return errors.New("usage: bdy nd reset [--soft|--mixed|--hard] <ref>")
+	}
+	mode := bdynd.ResetMixed
+	if *soft {
+		mode = bdynd.ResetSoft
+	}
+	if *mixed {
+		mode = bdynd.ResetMixed
+	}
+	if *hard {
+		mode = bdynd.ResetHard
+	}
+	r, err := bdynd.Open(".")
+	if err != nil {
+		return err
+	}
+	if err := bdynd.Reset(r, fs.Arg(0), mode); err != nil {
+		return err
+	}
+	fmt.Fprintf(out, "reset %s to %s\n", mode, fs.Arg(0))
+	return nil
 }
 
 func cmdNDStash(args []string, out io.Writer) error {
@@ -462,6 +545,11 @@ Usage:
   bdy nd commit -m <message>
   bdy nd log
   bdy nd show <commit>
+  bdy nd diff
+  bdy nd rm <path...>
+  bdy nd mv <old> <new>
+  bdy nd restore <path...>
+  bdy nd reset [--soft|--mixed|--hard] <ref>
   bdy nd branch [name]
   bdy nd switch <branch>
   bdy nd checkout <ref>
@@ -490,7 +578,7 @@ Repository:
 Remote object root:
   /apps/baiduyunStorage/nd/repos/<repo-name>
 
-Commands such as diff, rm, mv, restore, and reset are planned in the bdy nd implementation plan.`)
+Commands such as cherry-pick, rebase, blame, grep, and bisect are planned in the bdy nd implementation plan.`)
 }
 
 func printNDStatus(out io.Writer, st bdynd.StatusResult) {

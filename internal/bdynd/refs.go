@@ -33,6 +33,12 @@ func CurrentBranch(r Repo) (string, error) {
 
 func ResolveRef(r Repo, name string) (string, error) {
 	name = strings.TrimSpace(name)
+	if name == "HEAD" {
+		return HeadCommit(r)
+	}
+	if strings.HasPrefix(name, "HEAD~") {
+		return resolveHeadAncestor(r, strings.TrimPrefix(name, "HEAD~"))
+	}
 	candidates := []string{
 		name,
 		"refs/heads/" + name,
@@ -52,6 +58,28 @@ func ResolveRef(r Repo, name string) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("unknown ref %q", name)
+}
+
+func resolveHeadAncestor(r Repo, rawDepth string) (string, error) {
+	var depth int
+	if _, err := fmt.Sscanf(rawDepth, "%d", &depth); err != nil || depth < 0 {
+		return "", fmt.Errorf("unknown ref %q", "HEAD~"+rawDepth)
+	}
+	oid, err := HeadCommit(r)
+	if err != nil {
+		return "", err
+	}
+	for i := 0; i < depth; i++ {
+		c, err := ReadCommit(r, oid)
+		if err != nil {
+			return "", err
+		}
+		if c.Parent == "" {
+			return "", fmt.Errorf("unknown ref %q", "HEAD~"+rawDepth)
+		}
+		oid = c.Parent
+	}
+	return oid, nil
 }
 
 func UpdateRef(r Repo, ref, oid string) error {
