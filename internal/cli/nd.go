@@ -17,7 +17,7 @@ import (
 
 func cmdND(ctx context.Context, args []string, out io.Writer) error {
 	if len(args) == 0 {
-		return errors.New("usage: bdy nd init|status|add|commit|log|show|branch|switch|checkout|tag|lfs|remote|push|fetch|pull|clone|diff|rm|mv|restore|reset")
+		return errors.New("usage: bdy nd init|status|add|commit|log|show|branch|switch|checkout|tag|lfs|remote|push|fetch|pull|clone|merge|diff|rm|mv|restore|reset")
 	}
 	switch args[0] {
 	case "init":
@@ -218,10 +218,27 @@ func cmdND(ctx context.Context, args []string, out io.Writer) error {
 		}
 		fmt.Fprintf(out, "cloned %s into %s\n", args[1], r.Root)
 		return nil
+	case "merge":
+		if len(args) != 2 {
+			return errors.New("usage: bdy nd merge <branch>")
+		}
+		r, err := bdynd.Open(".")
+		if err != nil {
+			return err
+		}
+		result, err := bdynd.Merge(r, args[1])
+		if len(result.Conflicts) > 0 {
+			fmt.Fprintf(out, "conflicts: %s\n", strings.Join(result.Conflicts, ", "))
+		} else if result.Kind == bdynd.MergeFastForward {
+			fmt.Fprintln(out, "fast-forward")
+		} else if result.Kind == bdynd.MergeMerged {
+			fmt.Fprintf(out, "merged %s\n", args[1])
+		}
+		return err
 	case "diff", "rm", "mv", "restore", "reset":
 		return fmt.Errorf("bdy nd %s is planned but not implemented yet", args[0])
 	default:
-		return errors.New("usage: bdy nd init|status|add|commit|log|show|branch|switch|checkout|tag|lfs|remote|push|fetch|pull|clone|diff|rm|mv|restore|reset")
+		return errors.New("usage: bdy nd init|status|add|commit|log|show|branch|switch|checkout|tag|lfs|remote|push|fetch|pull|clone|merge|diff|rm|mv|restore|reset")
 	}
 }
 
@@ -403,6 +420,7 @@ Usage:
   bdy nd fetch
   bdy nd pull
   bdy nd clone <remote> [dir]
+  bdy nd merge <branch>
   bdy nd lfs track <pattern...>
   bdy nd lfs untrack <pattern...>
   bdy nd lfs status

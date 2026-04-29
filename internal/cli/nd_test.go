@@ -147,6 +147,35 @@ func TestBdyNDCloneRequiresRemote(t *testing.T) {
 	}
 }
 
+func TestBdyNDMergeFastForward(t *testing.T) {
+	root := t.TempDir()
+	old, _ := os.Getwd()
+	t.Cleanup(func() { _ = os.Chdir(old) })
+	if err := os.Chdir(root); err != nil {
+		t.Fatal(err)
+	}
+	var out, errOut bytes.Buffer
+	mustRunCLI(t, []string{"nd", "init"}, &out, &errOut)
+	if err := os.WriteFile("note.txt", []byte("base\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mustRunCLI(t, []string{"nd", "add", "note.txt"}, &out, &errOut)
+	mustRunCLI(t, []string{"nd", "commit", "-m", "base"}, &out, &errOut)
+	mustRunCLI(t, []string{"nd", "branch", "feature"}, &out, &errOut)
+	mustRunCLI(t, []string{"nd", "switch", "feature"}, &out, &errOut)
+	if err := os.WriteFile("new.txt", []byte("new\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mustRunCLI(t, []string{"nd", "add", "new.txt"}, &out, &errOut)
+	mustRunCLI(t, []string{"nd", "commit", "-m", "feature"}, &out, &errOut)
+	mustRunCLI(t, []string{"nd", "switch", "main"}, &out, &errOut)
+	out.Reset()
+	mustRunCLI(t, []string{"nd", "merge", "feature"}, &out, &errOut)
+	if !strings.Contains(out.String(), "fast-forward") {
+		t.Fatalf("merge output=%q", out.String())
+	}
+}
+
 func mustRunCLI(t *testing.T, args []string, out, errOut *bytes.Buffer) {
 	t.Helper()
 	out.Reset()
