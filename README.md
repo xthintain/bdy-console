@@ -25,7 +25,23 @@ sudo install -m 0755 bdy /usr/bin/bdy
 
 ## Authentication
 
-Configure your Baidu Open Platform app credentials. Use your own values; do not commit them.
+### Get App Credentials
+
+Create or open your Baidu Netdisk Open Platform application before running `bdy auth login`.
+
+1. Open the Baidu Netdisk Open Platform developer console: <https://pan.baidu.com/union>.
+2. Sign in with your Baidu account and complete the required developer verification if the console asks for it.
+3. Create an application for Baidu Netdisk Open Platform API access.
+4. Open the application detail page and copy these values:
+   - `AppID`
+   - `AppKey`
+   - `SecretKey`
+   - `SignKey`
+5. Keep those values private. Treat `SecretKey`, `SignKey`, access tokens, and refresh tokens as secrets.
+
+### Configure Local Credentials
+
+Configure your Baidu Netdisk Open Platform app credentials. Use your own values; do not commit them.
 
 ```bash
 bdy config set-app \
@@ -211,5 +227,3 @@ Build release binary:
 ```bash
 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags='-s -w' -o dist/bdy ./cmd/bdy
 ```
-
-# bdy-console
