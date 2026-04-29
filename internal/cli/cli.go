@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -18,8 +19,26 @@ import (
 	"baiduyunStorage/internal/repo"
 )
 
+const version = "dev"
+
+type globalOptions struct {
+	CWD   string
+	Yes   bool
+	Quiet bool
+	JSON  bool
+}
+
 func Run(args []string, stdout, stderr io.Writer) int {
-	if len(args) == 0 || isHelpArg(args[0]) {
+	opts, args, showHelp, showVersion, err := parseGlobalArgs(args)
+	if err != nil {
+		fmt.Fprintln(stderr, "error:", err)
+		return 1
+	}
+	if showVersion {
+		fmt.Fprintf(stdout, "bdy %s\n", version)
+		return 0
+	}
+	if len(args) == 0 || showHelp {
 		printRootHelp(stdout)
 		return 0
 	}
@@ -34,13 +53,15 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		}
 		return 0
 	}
-	if len(args) > 1 && isHelpArg(args[1]) {
-		if err := printHelpTopic(stdout, args[0]); err != nil {
+	if containsHelpArg(args[1:]) {
+		if err := printNestedHelp(stdout, args); err != nil {
 			fmt.Fprintln(stderr, "error:", err)
 			return 1
 		}
 		return 0
 	}
+	restore := applyGlobalOptions(opts)
+	defer restore()
 	ctx := context.Background()
 	if err := run(ctx, args, stdout); err != nil {
 		fmt.Fprintln(stderr, "error:", err)
@@ -49,8 +70,65 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
+func parseGlobalArgs(args []string) (globalOptions, []string, bool, bool, error) {
+	opts := globalOptions{}
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		switch arg {
+		case "-h", "--help":
+			return opts, args[i+1:], true, false, nil
+		case "-v", "--version":
+			return opts, args[i+1:], false, true, nil
+		case "-q", "--quiet":
+			opts.Quiet = true
+		case "-y", "--yes":
+			opts.Yes = true
+		case "--json":
+			opts.JSON = true
+		case "-C", "--cwd":
+			i++
+			if i >= len(args) {
+				return opts, nil, false, false, errors.New("-C requires a path")
+			}
+			opts.CWD = args[i]
+		case "--":
+			return opts, args[i+1:], false, false, nil
+		default:
+			if strings.HasPrefix(arg, "-") {
+				return opts, nil, false, false, fmt.Errorf("unknown global flag %s", arg)
+			}
+			return opts, args[i:], false, false, nil
+		}
+	}
+	return opts, nil, false, false, nil
+}
+
+func applyGlobalOptions(opts globalOptions) func() {
+	if opts.CWD == "" {
+		return func() {}
+	}
+	old, hadOld := os.LookupEnv(cmdCWDEnv)
+	_ = os.Setenv(cmdCWDEnv, cmdPathFromRoot(opts.CWD))
+	return func() {
+		if hadOld {
+			_ = os.Setenv(cmdCWDEnv, old)
+			return
+		}
+		_ = os.Unsetenv(cmdCWDEnv)
+	}
+}
+
 func isHelpArg(arg string) bool {
 	return arg == "--help" || arg == "-h"
+}
+
+func containsHelpArg(args []string) bool {
+	for _, arg := range args {
+		if isHelpArg(arg) {
+			return true
+		}
+	}
+	return false
 }
 
 func run(ctx context.Context, args []string, out io.Writer) error {
@@ -65,6 +143,8 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 		return cmdShell(ctx, args[1:], out)
 	case "lfs":
 		return cmdLFS(ctx, args[1:], out)
+	case "sync":
+		return cmdSync(ctx, args[1:], out)
 	case "init":
 		return cmdInit(args[1:], out)
 	case "status":
@@ -94,9 +174,17 @@ func printRootHelp(out io.Writer) {
 	fmt.Fprintln(out, `bdy - Baidu Netdisk command line storage
 
 Usage:
-  bdy <command> [args]
+  bdy [global flags] <space> <command> [command flags] [args]
   bdy help [command]
   bdy <command> --help
+
+Global flags:
+  -h, --help       Show help
+  -v, --version    Show version
+  -q, --quiet      Reduce optional output
+  -y, --yes        Assume yes for commands that ask for confirmation
+  -C, --cwd PATH   Temporary cloud working directory for this command
+  --json           Reserve machine-readable output mode for supported commands
 
 Spaces:
   cmd      Manage files under /apps/baiduyunStorage
@@ -126,10 +214,12 @@ Examples:
   bdy config set-app --app-id ID --app-key KEY --secret-key SECRET --sign-key SIGN
   bdy auth login
   bdy cmd ls -al
+  bdy -C git cmd ls
   eval "$(bdy cmd cd git)"
+  bdy home cmd mkdir /tmp/demo
   bdy lfs track '*.zip'
-  bdy init
-  bdy add README.md && bdy commit -m 'snapshot' && bdy push`)
+  bdy sync init
+  bdy sync add README.md && bdy sync commit -m 'snapshot' && bdy sync push`)
 }
 
 func printHelpTopic(out io.Writer, topic string) error {
@@ -150,6 +240,86 @@ func printHelpTopic(out io.Writer, topic string) error {
 		printSyncHelp(out)
 	default:
 		return fmt.Errorf("unknown help topic %q", topic)
+	}
+	return nil
+}
+
+func printNestedHelp(out io.Writer, args []string) error {
+	if len(args) == 0 {
+		printRootHelp(out)
+		return nil
+	}
+	if len(args) == 1 || isHelpArg(args[1]) {
+		return printHelpTopic(out, args[0])
+	}
+	switch args[0] {
+	case "cmd":
+		return printFileCommandHelp(out, "cmd", args[1], false)
+	case "home":
+		sub := args[1]
+		viaCmd := false
+		if sub == "cmd" {
+			viaCmd = true
+			if len(args) < 3 {
+				printHomeHelp(out)
+				return nil
+			}
+			sub = args[2]
+		}
+		return printFileCommandHelp(out, "home", sub, viaCmd)
+	case "sync":
+		printSyncHelp(out)
+		return nil
+	default:
+		return printHelpTopic(out, args[0])
+	}
+}
+
+func printFileCommandHelp(out io.Writer, space, command string, viaCmd bool) error {
+	prefix := "bdy " + space
+	root := repo.CmdRoot
+	if space == "home" {
+		root = "/"
+	}
+	if command == "cmd" && space == "home" {
+		printHomeHelp(out)
+		return nil
+	}
+	if viaCmd {
+		fmt.Fprintf(out, "Equivalent:\n  bdy home %s", command)
+		switch command {
+		case "mkdir", "touch", "cat", "rm", "delete", "find", "grep", "ls", "history", "vim", "pwd", "cd":
+			fmt.Fprintln(out, " ...")
+		default:
+			fmt.Fprintln(out)
+		}
+		fmt.Fprintf(out, "\nAlso accepted:\n  bdy home cmd %s ...\n\n", command)
+	}
+	switch command {
+	case "pwd":
+		fmt.Fprintf(out, "%s pwd\n\nRoot:\n  %s\n", prefix, root)
+	case "cd":
+		fmt.Fprintf(out, "%s cd [path]\n\nFor cmd space, use:\n  eval \"$(bdy cmd cd git)\"\n", prefix)
+	case "ls", "ll", "la":
+		fmt.Fprintf(out, "%s ls [-a] [-l] [path]\n%s ls [-al] [path]\n\nRoot:\n  %s\n", prefix, prefix, root)
+	case "find":
+		fmt.Fprintf(out, "%s find [-name pattern] [-type f|d] [pattern] [path]\n\nSearches path and filename metadata.\n", prefix)
+	case "grep":
+		fmt.Fprintf(out, "%s grep [-i] [-v] [-type f|d] <pattern> [path]\n\nSearches path and filename metadata, not file contents.\n", prefix)
+	case "rm", "delete":
+		fmt.Fprintf(out, "%s %s [-r] [-f] <path...>\n\nDeletes remote cloud paths.\n", prefix, command)
+	case "history":
+		fmt.Fprintf(out, "%s history [-c] [-n N]\n", prefix)
+	case "cat":
+		fmt.Fprintf(out, "%s cat [-n] <path...>\n", prefix)
+	case "mkdir":
+		fmt.Fprintf(out, "%s mkdir [-p] <path...>\n\nRoot:\n  %s\n", prefix, root)
+	case "touch":
+		fmt.Fprintf(out, "%s touch [-c] <path...>\n\nRoot:\n  %s\n", prefix, root)
+	case "vim":
+		fmt.Fprintf(out, "%s vim <path>\n\nDownloads a temporary copy, opens $EDITOR or vim, then uploads it back.\n", prefix)
+	default:
+		return fmt.Errorf("unknown %s command %q", space, command)
 	}
 	return nil
 }
@@ -293,6 +463,18 @@ func printSyncHelp(out io.Writer) {
 	fmt.Fprintln(out, `bdy snapshot sync - lightweight manifest-based folder sync
 
 Usage:
+  bdy sync init [--remote-root /apps/baiduyunStorage/workspace]
+  bdy sync status
+  bdy sync add <path...>
+  bdy sync commit -m <message>
+  bdy sync push
+  bdy sync pull
+  bdy sync ls [remote-path]
+  bdy sync rm <path...>
+  bdy sync mv <old> <new>
+  bdy sync remote
+
+Legacy aliases:
   bdy init [--remote-root /apps/baiduyunStorage/workspace]
   bdy status
   bdy add <path...>
@@ -305,12 +487,12 @@ Usage:
   bdy remote
 
 Examples:
-  bdy init
-  bdy status
-  bdy add notes.txt docs
-  bdy commit -m 'snapshot'
-  bdy push
-  bdy pull
+  bdy sync init
+  bdy sync status
+  bdy sync add notes.txt docs
+  bdy sync commit -m 'snapshot'
+  bdy sync push
+  bdy sync pull
 
 This is not a full Git database. It stores snapshots and manifests under .bdy/
 locally and syncs them to an isolated remote root. Use 'bdy lfs' for true large
@@ -484,29 +666,53 @@ func cmdInit(args []string, out io.Writer) error {
 	return nil
 }
 
-func cmdHome(ctx context.Context, args []string, out io.Writer) error {
+func cmdSync(ctx context.Context, args []string, out io.Writer) error {
 	if len(args) == 0 {
-		return errors.New("usage: bdy home ls [path]")
+		return errors.New("usage: bdy sync init|status|add|commit|push|pull|ls|rm|mv|remote")
 	}
 	switch args[0] {
+	case "init":
+		return cmdInit(args[1:], out)
+	case "status":
+		return cmdStatus(out)
+	case "add":
+		return cmdAdd(args[1:], out)
+	case "commit":
+		return cmdCommit(args[1:], out)
+	case "push":
+		return cmdPush(ctx, out)
+	case "pull":
+		return cmdPull(ctx, out)
 	case "ls":
-		cfg, err := auth.EnsureToken(ctx)
-		if err != nil {
-			return err
-		}
-		dir := "/"
-		if len(args) > 1 {
-			dir = homePath(args[1])
-		}
-		items, err := baidu.NewClient(cfg).List(ctx, dir)
-		if err != nil {
-			return err
-		}
-		printRemoteEntries(out, items)
-		return nil
+		return cmdLS(ctx, args[1:], out)
+	case "rm":
+		return cmdRemove(args[1:], out)
+	case "mv":
+		return cmdMove(args[1:], out)
+	case "remote":
+		return cmdRemote(ctx, out)
 	default:
-		return errors.New("usage: bdy home ls [path]")
+		return errors.New("usage: bdy sync init|status|add|commit|push|pull|ls|rm|mv|remote")
 	}
+}
+
+func cmdHome(ctx context.Context, args []string, out io.Writer) error {
+	if len(args) == 0 {
+		return errors.New("usage: bdy home ls|find|grep|rm|delete|cat|mkdir|touch|vim [args...]")
+	}
+	if args[0] == "cmd" {
+		args = args[1:]
+		if len(args) == 0 {
+			return errors.New("usage: bdy home cmd ls|find|grep|rm|delete|cat|mkdir|touch|vim [args...]")
+		}
+	}
+	return runCloudFileCommand(ctx, args, out, cloudFileSpace{
+		Name:      "home",
+		Root:      "/",
+		Resolve:   homePath,
+		AllowCD:   false,
+		UseLongLS: true,
+	})
 }
 
 func cmdStatus(out io.Writer) error {
@@ -845,11 +1051,14 @@ func validateIsolatedRemoteRoot(root string) error {
 
 func homePath(p string) string {
 	p = strings.TrimSpace(p)
-	if p == "" || p == "/" {
+	if p == "" || p == "." || p == "/" {
 		return "/"
 	}
-	p = strings.TrimPrefix(repo.CleanPath(p), "/")
-	return "/" + p
+	cleaned := path.Clean("/" + strings.TrimPrefix(p, "/"))
+	if cleaned == "." {
+		return "/"
+	}
+	return cleaned
 }
 
 func loadRemoteManifest(ctx context.Context, client baidu.Client, r repo.Repo) (repo.Manifest, error) {

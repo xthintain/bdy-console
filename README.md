@@ -119,6 +119,15 @@ bdy cmd rm -rf logs/archive
 bdy cmd history -n 20
 ```
 
+Global flags can be placed before the space command:
+
+```bash
+bdy -h
+bdy -v
+bdy -C git cmd ls
+bdy --json cmd ls
+```
+
 Notes:
 
 - `find` and `grep` search path and filename metadata, not file contents.
@@ -134,6 +143,24 @@ Use `home` only when you explicitly want to inspect the whole netdisk. Normal `c
 bdy home ls /
 bdy home ls /apps
 bdy home ls /Document
+```
+
+`home` can also run the same bash-style file commands against the whole netdisk. The explicit `cmd` word is accepted as a composition alias:
+
+```bash
+bdy home mkdir /tmp/demo
+bdy home cmd mkdir /tmp/demo
+bdy home cmd ls /tmp
+bdy home cmd rm -rf /tmp/demo
+```
+
+Use command-level help for details:
+
+```bash
+bdy cmd mkdir --help
+bdy home cmd mkdir --help
+bdy lfs --help
+bdy sync --help
 ```
 
 ## Git-LFS-Style Large Files
@@ -197,6 +224,17 @@ bdy add notes.txt docs
 bdy commit -m 'snapshot'
 bdy push
 bdy pull
+```
+
+The canonical grouped form is also supported:
+
+```bash
+bdy sync init
+bdy sync status
+bdy sync add notes.txt docs
+bdy sync commit -m 'snapshot'
+bdy sync push
+bdy sync pull
 ```
 
 This is not a full Git database. It is a simple manifest-based sync workflow.

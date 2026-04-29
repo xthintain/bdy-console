@@ -75,6 +75,21 @@ func TestDetailedHelp(t *testing.T) {
 			args: []string{"help", "cmd"},
 			want: []string{"bdy cmd", "Cloud working directory", "history [-n N]"},
 		},
+		{
+			name: "cmd command help",
+			args: []string{"cmd", "mkdir", "--help"},
+			want: []string{"bdy cmd mkdir [-p] <path...>", "Root:", "/apps/baiduyunStorage"},
+		},
+		{
+			name: "home command help",
+			args: []string{"home", "cmd", "mkdir", "--help"},
+			want: []string{"bdy home mkdir [-p] <path...>", "Equivalent:", "bdy home cmd mkdir"},
+		},
+		{
+			name: "sync help",
+			args: []string{"sync", "--help"},
+			want: []string{"bdy sync init", "bdy sync commit -m <message>", "Legacy aliases"},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -88,6 +103,25 @@ func TestDetailedHelp(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestGlobalFlags(t *testing.T) {
+	var out, errOut bytes.Buffer
+	if code := Run([]string{"-v"}, &out, &errOut); code != 0 {
+		t.Fatalf("version code=%d err=%s", code, errOut.String())
+	}
+	if !strings.Contains(out.String(), "bdy ") {
+		t.Fatalf("version output=%q", out.String())
+	}
+
+	out.Reset()
+	errOut.Reset()
+	if code := Run([]string{"-C", "git", "cmd", "pwd"}, &out, &errOut); code != 0 {
+		t.Fatalf("cwd code=%d err=%s", code, errOut.String())
+	}
+	if got, want := strings.TrimSpace(out.String()), "/apps/baiduyunStorage/git"; got != want {
+		t.Fatalf("pwd=%q want %q", got, want)
 	}
 }
 
@@ -145,6 +179,23 @@ func TestCmdPathUsesAppRootAndTemporaryCWD(t *testing.T) {
 	}
 	if got, want := cmdPath("/root.txt"), "/apps/baiduyunStorage/root.txt"; got != want {
 		t.Fatalf("absolute cmdPath with cwd=%q want %q", got, want)
+	}
+}
+
+func TestHomePathUsesWholeNetdiskRoot(t *testing.T) {
+	tests := map[string]string{
+		"":                    "/",
+		".":                   "/",
+		"/":                   "/",
+		"docs/a.txt":          "/docs/a.txt",
+		"/docs/a.txt":         "/docs/a.txt",
+		"../escape/docs.txt":  "/escape/docs.txt",
+		"/apps/demo/file.txt": "/apps/demo/file.txt",
+	}
+	for input, want := range tests {
+		if got := homePath(input); got != want {
+			t.Fatalf("homePath(%q)=%q want %q", input, got, want)
+		}
 	}
 }
 

@@ -31,20 +31,47 @@ const (
 	cmdUsage  = "usage: bdy cmd cd|pwd|ls|ll|la|find|grep|rm|delete|history|cat|mkdir|touch|vim"
 )
 
+type cloudFileSpace struct {
+	Name      string
+	Root      string
+	Resolve   func(string) string
+	AllowCD   bool
+	UseLongLS bool
+}
+
 func cmdShell(ctx context.Context, args []string, out io.Writer) error {
 	if len(args) == 0 {
 		return errors.New(cmdUsage)
 	}
+	return runCloudFileCommand(ctx, args, out, cloudFileSpace{
+		Name:    "cmd",
+		Root:    repo.CmdRoot,
+		Resolve: cmdPath,
+		AllowCD: true,
+	})
+}
+
+func runCloudFileCommand(ctx context.Context, args []string, out io.Writer, space cloudFileSpace) error {
+	if len(args) == 0 {
+		return fmt.Errorf("usage: bdy %s cd|pwd|ls|ll|la|find|grep|rm|delete|history|cat|mkdir|touch|vim", space.Name)
+	}
 	switch args[0] {
 	case "cd":
+		if !space.AllowCD {
+			return fmt.Errorf("cd is only supported for bdy cmd; use absolute paths with bdy %s", space.Name)
+		}
 		target := "."
 		if len(args) > 1 {
 			target = args[1]
 		}
-		fmt.Fprintf(out, "export %s=%s\n", cmdCWDEnv, shellQuote(cmdPath(target)))
+		fmt.Fprintf(out, "export %s=%s\n", cmdCWDEnv, shellQuote(space.Resolve(target)))
 		return nil
 	case "pwd":
-		fmt.Fprintln(out, cmdBasePath())
+		if space.AllowCD {
+			fmt.Fprintln(out, cmdBasePath())
+			return nil
+		}
+		fmt.Fprintln(out, space.Root)
 		return nil
 	}
 	cfg, err := auth.EnsureToken(ctx)
@@ -59,9 +86,13 @@ func cmdShell(ctx context.Context, args []string, out io.Writer) error {
 		if err != nil {
 			return err
 		}
-		items, err := client.List(ctx, cmdPath(path))
+		items, err := client.List(ctx, space.Resolve(path))
 		if err != nil {
 			return err
+		}
+		if space.UseLongLS && !opts.All && !opts.Long {
+			printRemoteEntries(out, items)
+			return nil
 		}
 		printCmdEntries(out, items, opts)
 		return nil
@@ -71,7 +102,7 @@ func cmdShell(ctx context.Context, args []string, out io.Writer) error {
 		if err != nil {
 			return err
 		}
-		return cmdFind(ctx, client, out, opts)
+		return cmdFind(ctx, client, out, opts, space.Resolve)
 	case "rm", "delete":
 		defer recordCmdHistory(args[0], args[1:])
 		rmOpts, err := parseRMArgs(args[0], args[1:])
@@ -80,7 +111,7 @@ func cmdShell(ctx context.Context, args []string, out io.Writer) error {
 		}
 		var paths []string
 		for _, p := range rmOpts.Paths {
-			paths = append(paths, cmdPath(p))
+			paths = append(paths, space.Resolve(p))
 		}
 		if err := client.FileManager(ctx, "delete", paths); err != nil {
 			if !rmOpts.Force {
@@ -98,8 +129,8 @@ func cmdShell(ctx context.Context, args []string, out io.Writer) error {
 			return err
 		}
 		for _, p := range mkdirOpts.Paths {
-			remotePath := cmdPath(p)
-			if err := ensureRemoteDir(ctx, client, remotePath); err != nil {
+			remotePath := space.Resolve(p)
+			if err := ensureRemoteDir(ctx, client, space.Root, remotePath); err != nil {
 				return err
 			}
 			fmt.Fprintf(out, "created %s\n", remotePath)
@@ -112,13 +143,13 @@ func cmdShell(ctx context.Context, args []string, out io.Writer) error {
 			return err
 		}
 		for _, p := range touchOpts.Paths {
-			remotePath := cmdPath(p)
+			remotePath := space.Resolve(p)
 			if touchOpts.NoCreate {
 				if _, err := findRemoteEntry(ctx, client, remotePath); err != nil {
 					continue
 				}
 			}
-			if err := cmdTouch(ctx, client, remotePath); err != nil {
+			if err := cmdTouch(ctx, client, space.Root, remotePath); err != nil {
 				return err
 			}
 			fmt.Fprintf(out, "touched %s\n", remotePath)
@@ -136,19 +167,19 @@ func cmdShell(ctx context.Context, args []string, out io.Writer) error {
 			if i > 0 {
 				fmt.Fprintln(out)
 			}
-			if err := cmdCat(ctx, client, out, cmdPath(path), catOpts.Number); err != nil {
+			if err := cmdCat(ctx, client, out, space.Resolve(path), catOpts.Number); err != nil {
 				return err
 			}
 		}
 		return nil
 	case "vim":
 		if len(args) != 2 {
-			return errors.New("usage: bdy cmd vim <path>")
+			return fmt.Errorf("usage: bdy %s vim <path>", space.Name)
 		}
 		defer recordCmdHistory("vim", args[1:])
-		return cmdVim(ctx, client, out, cmdPath(args[1]))
+		return cmdVim(ctx, client, out, space.Root, space.Resolve(args[1]))
 	default:
-		return errors.New(cmdUsage)
+		return fmt.Errorf("usage: bdy %s cd|pwd|ls|ll|la|find|grep|rm|delete|history|cat|mkdir|touch|vim", space.Name)
 	}
 }
 
@@ -374,7 +405,7 @@ func printCmdEntries(out io.Writer, items []baidu.FileEntry, opts cmdLSOptions) 
 	}
 }
 
-func cmdFind(ctx context.Context, client baidu.Client, out io.Writer, opts cmdSearchOptions) error {
+func cmdFind(ctx context.Context, client baidu.Client, out io.Writer, opts cmdSearchOptions, resolve func(string) string) error {
 	pattern := opts.Pattern
 	if opts.IgnoreCase {
 		pattern = "(?i)" + pattern
@@ -383,7 +414,7 @@ func cmdFind(ctx context.Context, client baidu.Client, out io.Writer, opts cmdSe
 	if err != nil {
 		return err
 	}
-	items, err := client.ListAll(ctx, cmdPath(opts.Path))
+	items, err := client.ListAll(ctx, resolve(opts.Path))
 	if err != nil {
 		return err
 	}
@@ -461,8 +492,8 @@ func writeNumbered(out io.Writer, r io.Reader) error {
 	return nil
 }
 
-func cmdTouch(ctx context.Context, client baidu.Client, remotePath string) error {
-	if err := ensureRemoteDir(ctx, client, filepath.ToSlash(filepath.Dir(remotePath))); err != nil {
+func cmdTouch(ctx context.Context, client baidu.Client, root, remotePath string) error {
+	if err := ensureRemoteDir(ctx, client, root, filepath.ToSlash(filepath.Dir(remotePath))); err != nil {
 		return err
 	}
 	tmp, err := os.CreateTemp("", "bdy-cmd-touch-*")
@@ -478,8 +509,8 @@ func cmdTouch(ctx context.Context, client baidu.Client, remotePath string) error
 	return client.UploadFile(ctx, tmpPath, remotePath)
 }
 
-func cmdVim(ctx context.Context, client baidu.Client, out io.Writer, remotePath string) error {
-	if err := ensureRemoteDir(ctx, client, filepath.ToSlash(filepath.Dir(remotePath))); err != nil {
+func cmdVim(ctx context.Context, client baidu.Client, out io.Writer, root, remotePath string) error {
+	if err := ensureRemoteDir(ctx, client, root, filepath.ToSlash(filepath.Dir(remotePath))); err != nil {
 		return err
 	}
 	tmp, err := os.CreateTemp("", "bdy-cmd-vim-"+filepath.Base(remotePath)+"-*")
@@ -524,17 +555,23 @@ func cmdVim(ctx context.Context, client baidu.Client, out io.Writer, remotePath 
 	return nil
 }
 
-func ensureRemoteDir(ctx context.Context, client baidu.Client, remotePath string) error {
+func ensureRemoteDir(ctx context.Context, client baidu.Client, root, remotePath string) error {
 	remotePath = strings.TrimRight(remotePath, "/")
 	if remotePath == "" || remotePath == "." || remotePath == "/" {
 		return nil
 	}
-	if !strings.HasPrefix(remotePath, repo.CmdRoot) {
-		return fmt.Errorf("path must be under %s", repo.CmdRoot)
+	root = strings.TrimRight(root, "/")
+	if root == "" {
+		root = "/"
 	}
-	rel := strings.TrimPrefix(strings.TrimPrefix(remotePath, repo.CmdRoot), "/")
-	current := repo.CmdRoot
-	_ = client.Mkdir(ctx, current)
+	if root != "/" && remotePath != root && !strings.HasPrefix(remotePath, root+"/") {
+		return fmt.Errorf("path must be under %s", root)
+	}
+	rel := strings.TrimPrefix(strings.TrimPrefix(remotePath, root), "/")
+	current := root
+	if current != "/" {
+		_ = client.Mkdir(ctx, current)
+	}
 	if rel == "" {
 		return nil
 	}
@@ -542,7 +579,11 @@ func ensureRemoteDir(ctx context.Context, client baidu.Client, remotePath string
 		if part == "" {
 			continue
 		}
-		current = strings.TrimRight(current, "/") + "/" + part
+		if current == "/" {
+			current = "/" + part
+		} else {
+			current = strings.TrimRight(current, "/") + "/" + part
+		}
 		_ = client.Mkdir(ctx, current)
 	}
 	return nil
