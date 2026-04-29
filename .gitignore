@@ -1,0 +1,70 @@
+# bdy local state and private cloud caches
+.bdy/
+.bdy-*/
+
+# Credentials, tokens, and local environment files
+.env
+.env.*
+*.env
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+*token*
+*secret*
+*credential*
+config.local.json
+config.private.json
+
+# Build outputs
+/bdy
+/dist/
+/bin/
+/build/
+/out/
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+coverage.out
+
+# Go workspace/cache artifacts
+/vendor/
+go.work
+go.work.sum
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+*~
+.cache/
+.tmp/
+tmp/
+temp/
+
+# OS/editor metadata
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Large/private downloaded artifacts
+downloads/
+download/
+private/
+secrets/
+*.zip
+*.rar
+*.7z
+*.tar
+*.tar.gz
+*.tgz
+*.iso
+*.img
+*.dmg
