@@ -119,6 +119,23 @@ func TestBdyNDLFSCheckoutRestoresCachedObject(t *testing.T) {
 	}
 }
 
+func TestBdyNDRemoteSetURL(t *testing.T) {
+	root := t.TempDir()
+	old, _ := os.Getwd()
+	t.Cleanup(func() { _ = os.Chdir(old) })
+	if err := os.Chdir(root); err != nil {
+		t.Fatal(err)
+	}
+	var out, errOut bytes.Buffer
+	mustRunCLI(t, []string{"nd", "init"}, &out, &errOut)
+	mustRunCLI(t, []string{"nd", "remote", "set-url", "origin", "/apps/baiduyunStorage/nd/repos/demo"}, &out, &errOut)
+	out.Reset()
+	mustRunCLI(t, []string{"nd", "remote"}, &out, &errOut)
+	if !strings.Contains(out.String(), "origin /apps/baiduyunStorage/nd/repos/demo") {
+		t.Fatalf("remote output=%q", out.String())
+	}
+}
+
 func mustRunCLI(t *testing.T, args []string, out, errOut *bytes.Buffer) {
 	t.Helper()
 	out.Reset()

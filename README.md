@@ -229,7 +229,7 @@ Local repository state is stored under:
 .bdynd/
 ```
 
-The implemented local commands are `init`, `add`, `commit`, `status`, `log`, `show`, `branch`, `switch`, `checkout`, and `tag`. Built-in `nd lfs` tracking is available. Remote push/pull, clone, merge, and advanced porcelain are planned in `docs/superpowers/plans/2026-04-29-bdy-nd-lfs.md`.
+The implemented commands include `init`, `add`, `commit`, `status`, `log`, `show`, `branch`, `switch`, `checkout`, `tag`, `remote`, `push`, `fetch`, and `pull`. Built-in `nd lfs` tracking and object sync are available. Clone, merge, and advanced porcelain are planned in `docs/superpowers/plans/2026-04-29-bdy-nd-lfs.md`.
 
 Branch and tag commands are also available:
 
@@ -239,6 +239,10 @@ bdy nd switch feature
 bdy nd branch
 bdy nd tag v1
 bdy nd checkout v1
+bdy nd remote set-url origin /apps/baiduyunStorage/nd/repos/demo
+bdy nd push
+bdy nd fetch
+bdy nd pull
 ```
 
 Large files can be tracked by the built-in `nd lfs` layer:
@@ -261,7 +265,14 @@ Tracked large-file content is cached under:
 .bdynd/lfs/objects/sha256/
 ```
 
-`push`, `fetch`, and `pull` use Baidu Netdisk as the remote object store. Until `bdy nd remote` is implemented, the default remote root is:
+Remote sync uses Baidu Netdisk as the remote object store. Configure an explicit remote root:
+
+```bash
+bdy nd remote set-url origin /apps/baiduyunStorage/nd/repos/demo
+bdy nd remote
+```
+
+If no remote is configured, `bdy nd push`, `fetch`, `pull`, and `lfs push/fetch/pull` use:
 
 ```text
 /apps/baiduyunStorage/nd/repos/<current-directory-name>

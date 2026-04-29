@@ -17,7 +17,7 @@ import (
 
 func cmdND(ctx context.Context, args []string, out io.Writer) error {
 	if len(args) == 0 {
-		return errors.New("usage: bdy nd init|status|add|commit|log|show|branch|switch|checkout|tag|lfs|diff|rm|mv|restore|reset")
+		return errors.New("usage: bdy nd init|status|add|commit|log|show|branch|switch|checkout|tag|lfs|remote|push|fetch|pull|diff|rm|mv|restore|reset")
 	}
 	switch args[0] {
 	case "init":
@@ -171,10 +171,65 @@ func cmdND(ctx context.Context, args []string, out io.Writer) error {
 		return nil
 	case "lfs":
 		return cmdNDLFS(ctx, args[1:], out)
+	case "remote":
+		return cmdNDRemote(args[1:], out)
+	case "push", "fetch", "pull":
+		r, err := bdynd.Open(".")
+		if err != nil {
+			return err
+		}
+		store, _, err := ndBaiduRemote(ctx, r)
+		if err != nil {
+			return err
+		}
+		switch args[0] {
+		case "push":
+			if err := bdynd.Push(ctx, r, store, bdynd.DefaultRemote); err != nil {
+				return err
+			}
+			fmt.Fprintln(out, "push complete")
+		case "fetch":
+			if err := bdynd.Fetch(ctx, r, store, bdynd.DefaultRemote); err != nil {
+				return err
+			}
+			fmt.Fprintln(out, "fetch complete")
+		case "pull":
+			if err := bdynd.Pull(ctx, r, store, bdynd.DefaultRemote); err != nil {
+				return err
+			}
+			fmt.Fprintln(out, "pull complete")
+		}
+		return nil
 	case "diff", "rm", "mv", "restore", "reset":
 		return fmt.Errorf("bdy nd %s is planned but not implemented yet", args[0])
 	default:
-		return errors.New("usage: bdy nd init|status|add|commit|log|show|branch|switch|checkout|tag|lfs|diff|rm|mv|restore|reset")
+		return errors.New("usage: bdy nd init|status|add|commit|log|show|branch|switch|checkout|tag|lfs|remote|push|fetch|pull|diff|rm|mv|restore|reset")
+	}
+}
+
+func cmdNDRemote(args []string, out io.Writer) error {
+	r, err := bdynd.Open(".")
+	if err != nil {
+		return err
+	}
+	if len(args) == 0 {
+		for name, root := range r.Config.Remotes {
+			fmt.Fprintf(out, "%s %s\n", name, root)
+		}
+		return nil
+	}
+	switch args[0] {
+	case "set-url":
+		if len(args) != 3 {
+			return errors.New("usage: bdy nd remote set-url <name> <remote-root>")
+		}
+		if err := bdynd.SetRemote(r, args[1], args[2]); err != nil {
+			return err
+		}
+		fmt.Fprintf(out, "%s %s\n", args[1], strings.TrimRight(args[2], "/"))
+		return nil
+	default:
+		return errors.New("usage: bdy nd remote [set-url <name> <remote-root>]")
 	}
 }
 
@@ -264,6 +319,7 @@ func ndBaiduRemote(ctx context.Context, r bdynd.Repo) (bdynd.RemoteStore, string
 	remoteRoot := r.Config.Remotes[bdynd.DefaultRemote]
 	if remoteRoot == "" {
 		remoteRoot = "/apps/baiduyunStorage/nd/repos/" + filepath.Base(r.Root)
+		_ = bdynd.SetRemote(r, bdynd.DefaultRemote, remoteRoot)
 	}
 	return ndRemoteStore{client: baidu.NewClient(cfg)}, remoteRoot, nil
 }
@@ -324,6 +380,10 @@ Usage:
   bdy nd switch <branch>
   bdy nd checkout <ref>
   bdy nd tag <name> [ref]
+  bdy nd remote [set-url <name> <remote-root>]
+  bdy nd push
+  bdy nd fetch
+  bdy nd pull
   bdy nd lfs track <pattern...>
   bdy nd lfs untrack <pattern...>
   bdy nd lfs status
