@@ -143,6 +143,8 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 		return cmdShell(ctx, args[1:], out)
 	case "lfs":
 		return cmdLFS(ctx, args[1:], out)
+	case "nd":
+		return cmdND(args[1:], out)
 	case "sync":
 		return cmdSync(ctx, args[1:], out)
 	case "init":
@@ -189,6 +191,7 @@ Global flags:
 Spaces:
   cmd      Manage files under /apps/baiduyunStorage
   lfs      Store Git-LFS-style large objects under /apps/baiduyunStorage/lfs
+  nd       Git-like NetDisk version storage under .bdynd
   home     Inspect the whole Baidu Netdisk only when explicitly requested
   sync     Snapshot sync commands under an isolated remote workspace
 
@@ -197,6 +200,7 @@ Core commands:
   auth     Login with Baidu OAuth device-code flow and check token status
   cmd      Bash-style cloud file commands: ls, find, grep, rm, cat, mkdir, touch, vim
   lfs      Git-LFS-style large file commands: track, push, fetch, checkout, pull
+  nd       NetDisk version commands: init, add, commit, log, status, show
   home     Whole-netdisk inspection commands
   init     Initialize snapshot sync metadata in the current directory
   status   Show local snapshot sync status
@@ -217,6 +221,7 @@ Examples:
   bdy -C git cmd ls
   eval "$(bdy cmd cd git)"
   bdy home cmd mkdir /tmp/demo
+  bdy nd init
   bdy lfs track '*.zip'
   bdy sync init
   bdy sync add README.md && bdy sync commit -m 'snapshot' && bdy sync push`)
@@ -236,6 +241,8 @@ func printHelpTopic(out io.Writer, topic string) error {
 		printCmdHelp(out)
 	case "lfs":
 		printLFSHelp(out)
+	case "nd":
+		printNDHelp(out)
 	case "init", "status", "add", "commit", "push", "pull", "ls", "rm", "mv", "remote", "sync":
 		printSyncHelp(out)
 	default:

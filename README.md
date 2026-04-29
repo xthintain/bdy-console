@@ -4,6 +4,7 @@
 
 - OAuth device-code login.
 - Bash-style cloud file commands under `/apps/baiduyunStorage`.
+- `bdy nd` Git-like NetDisk project versioning under `.bdynd/`.
 - Git-LFS-style large file storage backed by Baidu Netdisk.
 - A lightweight snapshot sync mode for simple folder sync.
 
@@ -208,6 +209,27 @@ version https://bdy-lfs/spec/v1
 oid sha256:<hash>
 size <bytes>
 ```
+
+## NetDisk Version Storage
+
+`bdy nd` is the new Git-like project versioning surface. It does not require a real `.git` repository.
+
+```bash
+bdy nd init
+printf 'hello\n' > a.txt
+bdy nd add a.txt
+bdy nd commit -m 'first'
+bdy nd status
+bdy nd log
+```
+
+Local repository state is stored under:
+
+```text
+.bdynd/
+```
+
+The first implemented local commands are `init`, `add`, `commit`, `status`, `log`, and `show`. Branches, built-in `nd lfs`, remote push/pull, clone, merge, and advanced porcelain are planned in `docs/superpowers/plans/2026-04-29-bdy-nd-lfs.md`.
 
 ## Snapshot Sync
 
