@@ -247,6 +247,22 @@ Local repository state is stored under:
 .bdynd/
 ```
 
+Ignore local files with `.bdyndignore`:
+
+```gitignore
+# cache and build output
+dist/
+tmp/
+*.log
+
+# private files
+.env
+*.key
+secret/
+```
+
+`bdy nd add .`, `diff`, and `stash` skip ignored files. Patterns support comments, blank lines, `dir/`, `*.ext`, exact paths, and root paths such as `/dist/`.
+
 The implemented commands include `init`, `add`, `commit`, `status`, `log`, `show`, `diff`, `rm`, `mv`, `restore`, `reset`, `pack`, `index`, `branch`, `switch`, `checkout`, `tag`, `remote`, `push`, `fetch`, `pull`, `clone`, `merge`, and `stash`. Built-in `nd lfs` tracking and object sync are available. Advanced porcelain is planned in `docs/superpowers/plans/2026-04-29-bdy-nd-lfs.md`.
 
 Branch and tag commands are also available:

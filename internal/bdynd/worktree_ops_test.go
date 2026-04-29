@@ -20,6 +20,20 @@ func TestDiffReportsWorktreeChangesAgainstHead(t *testing.T) {
 	}
 }
 
+func TestDiffSkipsBdyNDIgnorePatterns(t *testing.T) {
+	r := repoWithOneCommit(t, "base")
+	writeFile(t, filepath.Join(r.Root, ".bdyndignore"), "*.tmp\n")
+	writeFile(t, filepath.Join(r.Root, "scratch.tmp"), "scratch\n")
+
+	diff, err := Diff(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hasPath(diff.Added, "scratch.tmp") {
+		t.Fatalf("ignored file reported in diff: %+v", diff)
+	}
+}
+
 func TestRemoveAndMoveUpdateWorktreeAndIndex(t *testing.T) {
 	r := repoWithOneCommit(t, "base")
 	if err := Remove(r, []string{"note.txt"}); err != nil {

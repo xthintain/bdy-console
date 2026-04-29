@@ -74,7 +74,11 @@ func Move(r Repo, oldPath, newPath string) error {
 		return err
 	}
 	removeIndexPath(idx, oldRel)
-	if err := addPath(r, idx, newRel); err != nil {
+	ignore, err := LoadIgnore(r)
+	if err != nil {
+		return err
+	}
+	if err := addPath(r, idx, newRel, ignore); err != nil {
 		return err
 	}
 	return SaveIndex(r, idx)

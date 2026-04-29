@@ -89,6 +89,27 @@ Local repository root:
 .bdynd/
 ```
 
+Ignore file:
+
+```text
+.bdyndignore
+```
+
+Supported ignore examples:
+
+```gitignore
+# comments and blank lines are ignored
+dist/
+tmp/
+*.log
+.env
+*.key
+secret/
+/root-only-cache/
+```
+
+The ignore matcher supports directory patterns ending with `/`, extension globs such as `*.log`, exact file paths, and root paths beginning with `/`. `bdy nd add .`, `diff`, and `stash` skip ignored files.
+
 Common write workflow:
 
 ```bash

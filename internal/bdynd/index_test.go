@@ -22,6 +22,31 @@ func TestAddStagesFileBlob(t *testing.T) {
 	}
 }
 
+func TestAddDotSkipsBdyNDIgnorePatterns(t *testing.T) {
+	r := newTestRepo(t)
+	writeFile(t, filepath.Join(r.Root, ".bdyndignore"), "*.log\nsecret/\n/dist/\n")
+	writeFile(t, filepath.Join(r.Root, "keep.txt"), "keep\n")
+	writeFile(t, filepath.Join(r.Root, "debug.log"), "debug\n")
+	writeFile(t, filepath.Join(r.Root, "secret", "token.txt"), "secret\n")
+	writeFile(t, filepath.Join(r.Root, "dist", "app.bin"), "bin\n")
+
+	if err := Add(r, []string{"."}); err != nil {
+		t.Fatal(err)
+	}
+	idx, err := LoadIndex(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := idx.Entries["keep.txt"]; !ok {
+		t.Fatal("keep.txt not indexed")
+	}
+	for _, path := range []string{"debug.log", "secret/token.txt", "dist/app.bin"} {
+		if _, ok := idx.Entries[path]; ok {
+			t.Fatalf("ignored path indexed: %s", path)
+		}
+	}
+}
+
 func writeFile(t *testing.T, path, data string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {

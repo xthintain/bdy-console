@@ -59,44 +59,59 @@ func Add(r Repo, paths []string) error {
 	if err != nil {
 		return err
 	}
+	ignore, err := LoadIgnore(r)
+	if err != nil {
+		return err
+	}
 	for _, p := range paths {
-		if err := addPath(r, idx, p); err != nil {
+		if err := addPath(r, idx, p, ignore); err != nil {
 			return err
 		}
 	}
 	return SaveIndex(r, idx)
 }
 
-func addPath(r Repo, idx Index, p string) error {
+func addPath(r Repo, idx Index, p string, ignore IgnoreMatcher) error {
 	abs := filepath.Join(r.Root, cleanWorktreePath(p))
 	info, err := os.Stat(abs)
 	if err != nil {
 		return err
+	}
+	rel, err := filepath.Rel(r.Root, abs)
+	if err != nil {
+		return err
+	}
+	if ignore.Ignored(rel, info.IsDir()) {
+		return nil
 	}
 	if info.IsDir() {
 		return filepath.WalkDir(abs, func(path string, d os.DirEntry, err error) error {
 			if err != nil {
 				return err
 			}
+			rel, err := filepath.Rel(r.Root, path)
+			if err != nil {
+				return err
+			}
 			if d.IsDir() {
-				if d.Name() == DirName {
+				if ignore.Ignored(rel, true) {
 					return filepath.SkipDir
 				}
 				return nil
 			}
-			return addFile(r, idx, path)
+			return addFile(r, idx, path, ignore)
 		})
 	}
-	return addFile(r, idx, abs)
+	return addFile(r, idx, abs, ignore)
 }
 
-func addFile(r Repo, idx Index, abs string) error {
+func addFile(r Repo, idx Index, abs string, ignore IgnoreMatcher) error {
 	rel, err := filepath.Rel(r.Root, abs)
 	if err != nil {
 		return err
 	}
 	rel = cleanWorktreePath(rel)
-	if rel == "" || rel == DirName || strings.HasPrefix(rel, DirName+"/") {
+	if rel == "" || ignore.Ignored(rel, false) {
 		return nil
 	}
 	data, err := os.ReadFile(abs)

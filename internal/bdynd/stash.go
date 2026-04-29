@@ -92,17 +92,25 @@ func StashPop(r Repo, id string) error {
 
 func scanWorktreeEntries(r Repo) ([]IndexEntry, error) {
 	idx := Index{Entries: map[string]IndexEntry{}}
+	ignore, err := LoadIgnore(r)
+	if err != nil {
+		return nil, err
+	}
 	if err := filepath.WalkDir(r.Root, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
+		rel, err := filepath.Rel(r.Root, path)
+		if err != nil {
+			return err
+		}
 		if d.IsDir() {
-			if d.Name() == DirName {
+			if ignore.Ignored(rel, true) {
 				return filepath.SkipDir
 			}
 			return nil
 		}
-		return addFile(r, idx, path)
+		return addFile(r, idx, path, ignore)
 	}); err != nil {
 		return nil, err
 	}
