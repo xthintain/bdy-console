@@ -17,7 +17,7 @@ import (
 
 func cmdND(ctx context.Context, args []string, out io.Writer) error {
 	if len(args) == 0 {
-		return errors.New("usage: bdy nd init|status|add|commit|log|show|branch|switch|checkout|tag|lfs|remote|push|fetch|pull|clone|merge|stash|diff|rm|mv|restore|reset")
+		return errors.New("usage: bdy nd init|status|add|commit|log|show|branch|switch|checkout|tag|lfs|remote|push|fetch|pull|clone|merge|stash|diff|rm|mv|restore|reset|pack|index")
 	}
 	switch args[0] {
 	case "init":
@@ -289,9 +289,63 @@ func cmdND(ctx context.Context, args []string, out io.Writer) error {
 		return nil
 	case "reset":
 		return cmdNDReset(args[1:], out)
+	case "pack":
+		return cmdNDPack(args[1:], out)
+	case "index":
+		return cmdNDIndex(args[1:], out)
 	default:
-		return errors.New("usage: bdy nd init|status|add|commit|log|show|branch|switch|checkout|tag|lfs|remote|push|fetch|pull|clone|merge|stash|diff|rm|mv|restore|reset")
+		return errors.New("usage: bdy nd init|status|add|commit|log|show|branch|switch|checkout|tag|lfs|remote|push|fetch|pull|clone|merge|stash|diff|rm|mv|restore|reset|pack|index")
 	}
+}
+
+func cmdNDPack(args []string, out io.Writer) error {
+	fs := flag.NewFlagSet("nd pack", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	name := fs.String("name", "", "")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() > 1 {
+		return errors.New("usage: bdy nd pack [--name <name>] [ref]")
+	}
+	ref := "HEAD"
+	if fs.NArg() == 1 {
+		ref = fs.Arg(0)
+	}
+	r, err := bdynd.Open(".")
+	if err != nil {
+		return err
+	}
+	manifest, err := bdynd.Pack(r, bdynd.PackOptions{Ref: ref, Name: *name})
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(out, "packed %s %d object(s)\n", manifest.ID, len(manifest.Entries))
+	return nil
+}
+
+func cmdNDIndex(args []string, out io.Writer) error {
+	if len(args) != 0 {
+		return errors.New("usage: bdy nd index")
+	}
+	r, err := bdynd.Open(".")
+	if err != nil {
+		return err
+	}
+	packs, err := bdynd.ListPacks(r)
+	if err != nil {
+		return err
+	}
+	for _, pack := range packs {
+		name := pack.Name
+		if name == "" {
+			name = "-"
+		}
+		for _, entry := range pack.Entries {
+			fmt.Fprintf(out, "%s %s %s %s %d %d %d\n", pack.ID, name, entry.Kind, entry.Path, entry.Size, entry.Offset, entry.Length)
+		}
+	}
+	return nil
 }
 
 func cmdNDReset(args []string, out io.Writer) error {
@@ -550,6 +604,8 @@ Usage:
   bdy nd mv <old> <new>
   bdy nd restore <path...>
   bdy nd reset [--soft|--mixed|--hard] <ref>
+  bdy nd pack [--name <name>] [ref]
+  bdy nd index
   bdy nd branch [name]
   bdy nd switch <branch>
   bdy nd checkout <ref>

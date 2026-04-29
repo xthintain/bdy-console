@@ -229,7 +229,7 @@ Local repository state is stored under:
 .bdynd/
 ```
 
-The implemented commands include `init`, `add`, `commit`, `status`, `log`, `show`, `diff`, `rm`, `mv`, `restore`, `reset`, `branch`, `switch`, `checkout`, `tag`, `remote`, `push`, `fetch`, `pull`, `clone`, `merge`, and `stash`. Built-in `nd lfs` tracking and object sync are available. Advanced porcelain is planned in `docs/superpowers/plans/2026-04-29-bdy-nd-lfs.md`.
+The implemented commands include `init`, `add`, `commit`, `status`, `log`, `show`, `diff`, `rm`, `mv`, `restore`, `reset`, `pack`, `index`, `branch`, `switch`, `checkout`, `tag`, `remote`, `push`, `fetch`, `pull`, `clone`, `merge`, and `stash`. Built-in `nd lfs` tracking and object sync are available. Advanced porcelain is planned in `docs/superpowers/plans/2026-04-29-bdy-nd-lfs.md`.
 
 Branch and tag commands are also available:
 
@@ -251,6 +251,21 @@ bdy nd pull
 bdy nd clone /apps/baiduyunStorage/nd/repos/demo demo-clone
 bdy nd merge feature
 ```
+
+For high-throughput data storage, pack a committed snapshot into a single local data file plus a JSON manifest:
+
+```bash
+bdy nd pack --name batch-001
+bdy nd index
+```
+
+Pack files live under:
+
+```text
+.bdynd/packs/
+```
+
+`pack` is intended for batch object/database-style workloads where many files should be uploaded later as fewer large objects. `index` reads local pack manifests; it does not scan Baidu Netdisk.
 
 Temporarily save dirty worktree changes without creating a commit:
 

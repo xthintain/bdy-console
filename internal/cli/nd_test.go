@@ -261,6 +261,33 @@ func TestBdyNDWorktreePorcelain(t *testing.T) {
 	}
 }
 
+func TestBdyNDPackAndIndex(t *testing.T) {
+	root := t.TempDir()
+	old, _ := os.Getwd()
+	t.Cleanup(func() { _ = os.Chdir(old) })
+	if err := os.Chdir(root); err != nil {
+		t.Fatal(err)
+	}
+	var out, errOut bytes.Buffer
+	mustRunCLI(t, []string{"nd", "init"}, &out, &errOut)
+	if err := os.WriteFile("data.txt", []byte("payload\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mustRunCLI(t, []string{"nd", "add", "data.txt"}, &out, &errOut)
+	mustRunCLI(t, []string{"nd", "commit", "-m", "data"}, &out, &errOut)
+
+	out.Reset()
+	mustRunCLI(t, []string{"nd", "pack", "--name", "batch"}, &out, &errOut)
+	if !strings.Contains(out.String(), "packed ") || !strings.Contains(out.String(), "1 object(s)") {
+		t.Fatalf("pack output=%q", out.String())
+	}
+	out.Reset()
+	mustRunCLI(t, []string{"nd", "index"}, &out, &errOut)
+	if !strings.Contains(out.String(), "data.txt") || !strings.Contains(out.String(), "batch") {
+		t.Fatalf("index output=%q", out.String())
+	}
+}
+
 func mustRunCLI(t *testing.T, args []string, out, errOut *bytes.Buffer) {
 	t.Helper()
 	out.Reset()
