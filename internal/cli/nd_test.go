@@ -92,6 +92,33 @@ func TestBdyNDLFSTrackAndStatus(t *testing.T) {
 	mustRunCLI(t, []string{"nd", "lfs", "untrack", "*.bin"}, &out, &errOut)
 }
 
+func TestBdyNDLFSCheckoutRestoresCachedObject(t *testing.T) {
+	root := t.TempDir()
+	old, _ := os.Getwd()
+	t.Cleanup(func() { _ = os.Chdir(old) })
+	if err := os.Chdir(root); err != nil {
+		t.Fatal(err)
+	}
+	var out, errOut bytes.Buffer
+	mustRunCLI(t, []string{"nd", "init"}, &out, &errOut)
+	mustRunCLI(t, []string{"nd", "lfs", "track", "*.bin"}, &out, &errOut)
+	if err := os.WriteFile("large.bin", []byte("large-content"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mustRunCLI(t, []string{"nd", "add", "large.bin"}, &out, &errOut)
+	if err := os.WriteFile("large.bin", []byte("pointer-placeholder"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mustRunCLI(t, []string{"nd", "lfs", "checkout"}, &out, &errOut)
+	data, err := os.ReadFile("large.bin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "large-content" {
+		t.Fatalf("large.bin=%q", data)
+	}
+}
+
 func mustRunCLI(t *testing.T, args []string, out, errOut *bytes.Buffer) {
 	t.Helper()
 	out.Reset()

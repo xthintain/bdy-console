@@ -144,7 +144,7 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 	case "lfs":
 		return cmdLFS(ctx, args[1:], out)
 	case "nd":
-		return cmdND(args[1:], out)
+		return cmdND(ctx, args[1:], out)
 	case "sync":
 		return cmdSync(ctx, args[1:], out)
 	case "init":

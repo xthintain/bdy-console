@@ -1,16 +1,21 @@
 package cli
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 
+	"baiduyunStorage/internal/auth"
+	"baiduyunStorage/internal/baidu"
 	"baiduyunStorage/internal/bdynd"
 )
 
-func cmdND(args []string, out io.Writer) error {
+func cmdND(ctx context.Context, args []string, out io.Writer) error {
 	if len(args) == 0 {
 		return errors.New("usage: bdy nd init|status|add|commit|log|show|branch|switch|checkout|tag|lfs|diff|rm|mv|restore|reset")
 	}
@@ -165,7 +170,7 @@ func cmdND(args []string, out io.Writer) error {
 		fmt.Fprintf(out, "created tag %s\n", args[1])
 		return nil
 	case "lfs":
-		return cmdNDLFS(args[1:], out)
+		return cmdNDLFS(ctx, args[1:], out)
 	case "diff", "rm", "mv", "restore", "reset":
 		return fmt.Errorf("bdy nd %s is planned but not implemented yet", args[0])
 	default:
@@ -173,9 +178,9 @@ func cmdND(args []string, out io.Writer) error {
 	}
 }
 
-func cmdNDLFS(args []string, out io.Writer) error {
+func cmdNDLFS(ctx context.Context, args []string, out io.Writer) error {
 	if len(args) == 0 {
-		return errors.New("usage: bdy nd lfs track|untrack|status|ls-files")
+		return errors.New("usage: bdy nd lfs track|untrack|status|ls-files|push|fetch|checkout|pull")
 	}
 	r, err := bdynd.Open(".")
 	if err != nil {
@@ -213,9 +218,96 @@ func cmdNDLFS(args []string, out io.Writer) error {
 			fmt.Fprintf(out, "%s %s %d\n", file.LFSOID, file.Path, file.Size)
 		}
 		return nil
+	case "checkout":
+		if err := bdynd.CheckoutLFS(r); err != nil {
+			return err
+		}
+		fmt.Fprintln(out, "lfs checkout complete")
+		return nil
+	case "push", "fetch", "pull":
+		store, remoteRoot, err := ndBaiduRemote(ctx, r)
+		if err != nil {
+			return err
+		}
+		switch args[0] {
+		case "push":
+			if err := bdynd.PushLFS(ctx, r, store, remoteRoot); err != nil {
+				return err
+			}
+			fmt.Fprintln(out, "lfs push complete")
+		case "fetch":
+			if err := bdynd.FetchLFS(ctx, r, store, remoteRoot); err != nil {
+				return err
+			}
+			fmt.Fprintln(out, "lfs fetch complete")
+		case "pull":
+			if err := bdynd.PullLFS(ctx, r, store, remoteRoot); err != nil {
+				return err
+			}
+			fmt.Fprintln(out, "lfs pull complete")
+		}
+		return nil
 	default:
-		return errors.New("usage: bdy nd lfs track|untrack|status|ls-files")
+		return errors.New("usage: bdy nd lfs track|untrack|status|ls-files|push|fetch|checkout|pull")
 	}
+}
+
+type ndRemoteStore struct {
+	client baidu.Client
+}
+
+func ndBaiduRemote(ctx context.Context, r bdynd.Repo) (bdynd.RemoteStore, string, error) {
+	cfg, err := auth.EnsureToken(ctx)
+	if err != nil {
+		return nil, "", err
+	}
+	remoteRoot := r.Config.Remotes[bdynd.DefaultRemote]
+	if remoteRoot == "" {
+		remoteRoot = "/apps/baiduyunStorage/nd/repos/" + filepath.Base(r.Root)
+	}
+	return ndRemoteStore{client: baidu.NewClient(cfg)}, remoteRoot, nil
+}
+
+func (s ndRemoteStore) UploadFile(ctx context.Context, localPath, remotePath string) error {
+	return s.client.UploadFile(ctx, localPath, remotePath)
+}
+
+func (s ndRemoteStore) DownloadFile(ctx context.Context, remotePath, localPath string) error {
+	parent := filepath.ToSlash(filepath.Dir(remotePath))
+	name := filepath.Base(remotePath)
+	items, err := s.client.List(ctx, parent)
+	if err != nil {
+		return err
+	}
+	for _, item := range items {
+		if item.Path != remotePath && item.ServerFilename != name {
+			continue
+		}
+		meta, err := s.client.FileMetas(ctx, []uint64{item.FSID}, true)
+		if err != nil {
+			return err
+		}
+		if len(meta) == 0 || meta[0].DLink == "" {
+			return fmt.Errorf("missing dlink for %s", remotePath)
+		}
+		return s.client.Download(ctx, meta[0].DLink, localPath)
+	}
+	return os.ErrNotExist
+}
+
+func (s ndRemoteStore) Exists(ctx context.Context, remotePath string) (bool, error) {
+	parent := filepath.ToSlash(filepath.Dir(remotePath))
+	name := filepath.Base(remotePath)
+	items, err := s.client.List(ctx, parent)
+	if err != nil {
+		return false, nil
+	}
+	for _, item := range items {
+		if item.Path == remotePath || item.ServerFilename == name {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func printNDHelp(out io.Writer) {
@@ -236,6 +328,10 @@ Usage:
   bdy nd lfs untrack <pattern...>
   bdy nd lfs status
   bdy nd lfs ls-files
+  bdy nd lfs push
+  bdy nd lfs fetch
+  bdy nd lfs checkout
+  bdy nd lfs pull
 
 Repository:
   .bdynd/

@@ -248,6 +248,10 @@ bdy nd lfs track '*.bin'
 bdy nd add large.bin
 bdy nd lfs status
 bdy nd lfs ls-files
+bdy nd lfs checkout
+bdy nd lfs push
+bdy nd lfs fetch
+bdy nd lfs pull
 bdy nd lfs untrack '*.bin'
 ```
 
@@ -255,6 +259,12 @@ Tracked large-file content is cached under:
 
 ```text
 .bdynd/lfs/objects/sha256/
+```
+
+`push`, `fetch`, and `pull` use Baidu Netdisk as the remote object store. Until `bdy nd remote` is implemented, the default remote root is:
+
+```text
+/apps/baiduyunStorage/nd/repos/<current-directory-name>
 ```
 
 ## Snapshot Sync
