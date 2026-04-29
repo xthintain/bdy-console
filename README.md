@@ -229,7 +229,7 @@ Local repository state is stored under:
 .bdynd/
 ```
 
-The implemented local commands are `init`, `add`, `commit`, `status`, `log`, `show`, `branch`, `switch`, `checkout`, and `tag`. Built-in `nd lfs`, remote push/pull, clone, merge, and advanced porcelain are planned in `docs/superpowers/plans/2026-04-29-bdy-nd-lfs.md`.
+The implemented local commands are `init`, `add`, `commit`, `status`, `log`, `show`, `branch`, `switch`, `checkout`, and `tag`. Built-in `nd lfs` tracking is available. Remote push/pull, clone, merge, and advanced porcelain are planned in `docs/superpowers/plans/2026-04-29-bdy-nd-lfs.md`.
 
 Branch and tag commands are also available:
 
@@ -239,6 +239,22 @@ bdy nd switch feature
 bdy nd branch
 bdy nd tag v1
 bdy nd checkout v1
+```
+
+Large files can be tracked by the built-in `nd lfs` layer:
+
+```bash
+bdy nd lfs track '*.bin'
+bdy nd add large.bin
+bdy nd lfs status
+bdy nd lfs ls-files
+bdy nd lfs untrack '*.bin'
+```
+
+Tracked large-file content is cached under:
+
+```text
+.bdynd/lfs/objects/sha256/
 ```
 
 ## Snapshot Sync

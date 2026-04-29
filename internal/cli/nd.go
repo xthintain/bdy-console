@@ -12,7 +12,7 @@ import (
 
 func cmdND(args []string, out io.Writer) error {
 	if len(args) == 0 {
-		return errors.New("usage: bdy nd init|status|add|commit|log|show|branch|switch|checkout|tag|diff|rm|mv|restore|reset")
+		return errors.New("usage: bdy nd init|status|add|commit|log|show|branch|switch|checkout|tag|lfs|diff|rm|mv|restore|reset")
 	}
 	switch args[0] {
 	case "init":
@@ -164,10 +164,57 @@ func cmdND(args []string, out io.Writer) error {
 		}
 		fmt.Fprintf(out, "created tag %s\n", args[1])
 		return nil
+	case "lfs":
+		return cmdNDLFS(args[1:], out)
 	case "diff", "rm", "mv", "restore", "reset":
 		return fmt.Errorf("bdy nd %s is planned but not implemented yet", args[0])
 	default:
-		return errors.New("usage: bdy nd init|status|add|commit|log|show|branch|switch|checkout|tag|diff|rm|mv|restore|reset")
+		return errors.New("usage: bdy nd init|status|add|commit|log|show|branch|switch|checkout|tag|lfs|diff|rm|mv|restore|reset")
+	}
+}
+
+func cmdNDLFS(args []string, out io.Writer) error {
+	if len(args) == 0 {
+		return errors.New("usage: bdy nd lfs track|untrack|status|ls-files")
+	}
+	r, err := bdynd.Open(".")
+	if err != nil {
+		return err
+	}
+	switch args[0] {
+	case "track":
+		if len(args) < 2 {
+			return errors.New("usage: bdy nd lfs track <pattern...>")
+		}
+		for _, pattern := range args[1:] {
+			if err := bdynd.TrackPattern(r, pattern); err != nil {
+				return err
+			}
+			fmt.Fprintf(out, "tracking %s\n", pattern)
+		}
+		return nil
+	case "untrack":
+		if len(args) < 2 {
+			return errors.New("usage: bdy nd lfs untrack <pattern...>")
+		}
+		for _, pattern := range args[1:] {
+			if err := bdynd.UntrackPattern(r, pattern); err != nil {
+				return err
+			}
+			fmt.Fprintf(out, "untracked %s\n", pattern)
+		}
+		return nil
+	case "status", "ls-files":
+		files, err := bdynd.LFSFiles(r)
+		if err != nil {
+			return err
+		}
+		for _, file := range files {
+			fmt.Fprintf(out, "%s %s %d\n", file.LFSOID, file.Path, file.Size)
+		}
+		return nil
+	default:
+		return errors.New("usage: bdy nd lfs track|untrack|status|ls-files")
 	}
 }
 
@@ -185,6 +232,10 @@ Usage:
   bdy nd switch <branch>
   bdy nd checkout <ref>
   bdy nd tag <name> [ref]
+  bdy nd lfs track <pattern...>
+  bdy nd lfs untrack <pattern...>
+  bdy nd lfs status
+  bdy nd lfs ls-files
 
 Repository:
   .bdynd/
@@ -192,8 +243,8 @@ Repository:
 Remote object root:
   /apps/baiduyunStorage/nd/repos/<repo-name>
 
-Commands such as built-in lfs, push, pull, clone, merge, and stash are planned
-in the bdy nd implementation plan.`)
+Commands such as lfs push/pull, clone, merge, and stash are planned in the bdy
+nd implementation plan.`)
 }
 
 func printNDStatus(out io.Writer, st bdynd.StatusResult) {

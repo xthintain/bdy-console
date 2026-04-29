@@ -103,6 +103,18 @@ func addFile(r Repo, idx Index, abs string) error {
 	if err != nil {
 		return err
 	}
+	isLFS, err := MatchesLFSPattern(r, rel)
+	if err != nil {
+		return err
+	}
+	if isLFS {
+		p, err := StoreLFSFile(r, abs)
+		if err != nil {
+			return err
+		}
+		idx.Entries[rel] = IndexEntry{Path: rel, Kind: KindLFS, LFSOID: p.OID, Size: p.Size}
+		return nil
+	}
 	oid, err := WriteBlob(r, data)
 	if err != nil {
 		return err
