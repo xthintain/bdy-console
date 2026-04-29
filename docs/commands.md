@@ -53,10 +53,12 @@ bdy cmd delete logs/archive
 Use a temporary shell-scoped target path:
 
 ```bash
-eval "$(bdy cmd cd datasets/2026-04)"
+bdy cmd cd datasets/2026-04
 bdy cmd pwd
 bdy cmd ls -al raw
 ```
+
+`bdy cmd cd` stores the cwd for the current shell session and also prints an `export BDY_CMD_CWD=...` line for users who prefer `eval "$(bdy cmd cd path)"`.
 
 ## Whole Netdisk
 

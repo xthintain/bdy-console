@@ -229,6 +229,18 @@ func TestCmdPathUsesAppRootAndTemporaryCWD(t *testing.T) {
 	}
 }
 
+func TestCmdCDPersistsForCurrentShellSession(t *testing.T) {
+	t.Setenv(cmdCWDEnv, "")
+	t.Setenv(cmdSessionDirEnv, t.TempDir())
+	var out, errOut bytes.Buffer
+	if code := Run([]string{"cmd", "cd", "git"}, &out, &errOut); code != 0 {
+		t.Fatalf("cd code=%d err=%s", code, errOut.String())
+	}
+	if got, want := cmdPath("repo.txt"), "/apps/baiduyunStorage/git/repo.txt"; got != want {
+		t.Fatalf("session cmdPath=%q want %q", got, want)
+	}
+}
+
 func TestHomePathUsesWholeNetdiskRoot(t *testing.T) {
 	tests := map[string]string{
 		"":                    "/",

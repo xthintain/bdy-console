@@ -27,8 +27,9 @@ type cmdHistoryEntry struct {
 }
 
 const (
-	cmdCWDEnv = "BDY_CMD_CWD"
-	cmdUsage  = "usage: bdy cmd cd|pwd|ls|ll|la|find|grep|rm|delete|history|cat|mkdir|touch|vim"
+	cmdCWDEnv        = "BDY_CMD_CWD"
+	cmdSessionDirEnv = "BDY_CMD_SESSION_DIR"
+	cmdUsage         = "usage: bdy cmd cd|pwd|ls|ll|la|find|grep|rm|delete|history|cat|mkdir|touch|vim"
 )
 
 type cloudFileSpace struct {
@@ -64,7 +65,9 @@ func runCloudFileCommand(ctx context.Context, args []string, out io.Writer, spac
 		if len(args) > 1 {
 			target = args[1]
 		}
-		fmt.Fprintf(out, "export %s=%s\n", cmdCWDEnv, shellQuote(space.Resolve(target)))
+		resolved := space.Resolve(target)
+		_ = saveCmdSessionPath(resolved)
+		fmt.Fprintf(out, "export %s=%s\n", cmdCWDEnv, shellQuote(resolved))
 		return nil
 	case "pwd":
 		if space.AllowCD {
@@ -628,9 +631,43 @@ func cmdPath(p string) string {
 func cmdBasePath() string {
 	raw := strings.TrimSpace(os.Getenv(cmdCWDEnv))
 	if raw == "" {
+		raw = loadCmdSessionPath()
+	}
+	if raw == "" {
 		return repo.CmdRoot
 	}
 	return cmdPathFromRoot(raw)
+}
+
+func saveCmdSessionPath(path string) error {
+	sessionPath, err := cmdSessionPath()
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(sessionPath), 0o700); err != nil {
+		return err
+	}
+	return os.WriteFile(sessionPath, []byte(cmdPathFromRoot(path)+"\n"), 0o600)
+}
+
+func loadCmdSessionPath() string {
+	sessionPath, err := cmdSessionPath()
+	if err != nil {
+		return ""
+	}
+	data, err := os.ReadFile(sessionPath)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(data))
+}
+
+func cmdSessionPath() (string, error) {
+	dir := os.Getenv(cmdSessionDirEnv)
+	if dir == "" {
+		dir = filepath.Join(os.TempDir(), "bdy-cmd-cwd")
+	}
+	return filepath.Join(dir, fmt.Sprintf("%d-%d", os.Getuid(), os.Getppid())), nil
 }
 
 func cmdPathFromRoot(p string) string {

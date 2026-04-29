@@ -115,11 +115,11 @@ bdy cmd pwd
 Temporarily switch the target directory for the current shell:
 
 ```bash
-eval "$(bdy cmd cd git)"
+bdy cmd cd git
 bdy cmd pwd
 ```
 
-This sets `BDY_CMD_CWD` in the current shell only. Closing the terminal or using a new shell without that environment variable returns to `/apps/baiduyunStorage`.
+`bdy cmd cd` records a temporary cwd for the current shell session. Closing the terminal or using a different shell returns to `/apps/baiduyunStorage`. The older `eval "$(bdy cmd cd git)"` form is still accepted because `cd` also prints an `export BDY_CMD_CWD=...` line.
 
 Common commands:
 
@@ -372,7 +372,7 @@ Use `cmd cd` when you want several cloud operations to target the same app-space
 
 ```bash
 bdy cmd mkdir -p datasets/2026-04/raw
-eval "$(bdy cmd cd datasets/2026-04)"
+bdy cmd cd datasets/2026-04
 bdy cmd pwd
 bdy cmd touch raw/ingest.log
 bdy cmd ls -al raw
@@ -380,7 +380,7 @@ bdy cmd grep -i report raw
 bdy cmd history -n 10
 ```
 
-The `BDY_CMD_CWD` environment variable only affects the current shell. A new terminal falls back to `/apps/baiduyunStorage`.
+The cwd is stored for the current shell session. A new terminal falls back to `/apps/baiduyunStorage`.
 
 ### Whole-Netdisk Inspection
 
