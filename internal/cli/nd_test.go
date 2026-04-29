@@ -261,6 +261,30 @@ func TestBdyNDWorktreePorcelain(t *testing.T) {
 	}
 }
 
+func TestBdyNDRmCachedLeavesWorktreeFile(t *testing.T) {
+	root := t.TempDir()
+	old, _ := os.Getwd()
+	t.Cleanup(func() { _ = os.Chdir(old) })
+	if err := os.Chdir(root); err != nil {
+		t.Fatal(err)
+	}
+	var out, errOut bytes.Buffer
+	mustRunCLI(t, []string{"nd", "init"}, &out, &errOut)
+	if err := os.WriteFile("note.txt", []byte("base\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mustRunCLI(t, []string{"nd", "add", "note.txt"}, &out, &errOut)
+	mustRunCLI(t, []string{"nd", "rm", "--cached", "note.txt"}, &out, &errOut)
+	if got, err := os.ReadFile("note.txt"); err != nil || string(got) != "base\n" {
+		t.Fatalf("note=%q err=%v", got, err)
+	}
+	out.Reset()
+	mustRunCLI(t, []string{"nd", "status"}, &out, &errOut)
+	if strings.Contains(out.String(), "note.txt") {
+		t.Fatalf("status=%q", out.String())
+	}
+}
+
 func TestBdyNDPackAndIndex(t *testing.T) {
 	root := t.TempDir()
 	old, _ := os.Getwd()

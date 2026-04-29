@@ -147,6 +147,7 @@ bdy nd init
 bdy nd add a.txt
 bdy nd commit -m 'message'
 bdy nd rm a.txt
+bdy nd rm --cached keep-local.txt
 bdy nd mv old.txt new.txt
 bdy nd restore a.txt
 bdy nd reset --hard HEAD~1

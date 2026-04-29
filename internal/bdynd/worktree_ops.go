@@ -37,6 +37,14 @@ func Diff(r Repo) (StatusResult, error) {
 }
 
 func Remove(r Repo, paths []string) error {
+	return removePaths(r, paths, false)
+}
+
+func RemoveCached(r Repo, paths []string) error {
+	return removePaths(r, paths, true)
+}
+
+func removePaths(r Repo, paths []string, cached bool) error {
 	if len(paths) == 0 {
 		return errors.New("rm requires at least one path")
 	}
@@ -49,8 +57,10 @@ func Remove(r Repo, paths []string) error {
 		if rel == "" || rel == DirName || strings.HasPrefix(rel, DirName+"/") {
 			return fmt.Errorf("invalid path %q", p)
 		}
-		if err := os.RemoveAll(filepath.Join(r.Root, rel)); err != nil {
-			return err
+		if !cached {
+			if err := os.RemoveAll(filepath.Join(r.Root, rel)); err != nil {
+				return err
+			}
 		}
 		removeIndexPath(idx, rel)
 	}

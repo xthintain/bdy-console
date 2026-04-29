@@ -72,6 +72,23 @@ func TestRemoveAndMoveUpdateWorktreeAndIndex(t *testing.T) {
 	}
 }
 
+func TestRemoveCachedLeavesWorktreeFile(t *testing.T) {
+	r := repoWithOneCommit(t, "base")
+	if err := RemoveCached(r, []string{"note.txt"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := readFile(t, filepath.Join(r.Root, "note.txt")); got != "base\n" {
+		t.Fatalf("worktree file changed: %q", got)
+	}
+	idx, err := LoadIndex(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := idx.Entries["note.txt"]; ok {
+		t.Fatal("cached remove left file in index")
+	}
+}
+
 func TestRestoreAndResetModes(t *testing.T) {
 	r := repoWithOneCommit(t, "base")
 	writeFile(t, filepath.Join(r.Root, "note.txt"), "dirty\n")

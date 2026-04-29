@@ -250,17 +250,30 @@ func cmdND(ctx context.Context, args []string, out io.Writer) error {
 		printNDStatus(out, diff)
 		return nil
 	case "rm":
-		if len(args) < 2 {
-			return errors.New("usage: bdy nd rm <path...>")
+		fs := flag.NewFlagSet("nd rm", flag.ContinueOnError)
+		fs.SetOutput(io.Discard)
+		cached := fs.Bool("cached", false, "")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if fs.NArg() < 1 {
+			return errors.New("usage: bdy nd rm [--cached] <path...>")
 		}
 		r, err := bdynd.Open(".")
 		if err != nil {
 			return err
 		}
-		if err := bdynd.Remove(r, args[1:]); err != nil {
+		if *cached {
+			if err := bdynd.RemoveCached(r, fs.Args()); err != nil {
+				return err
+			}
+			fmt.Fprintf(out, "unstaged %d path(s)\n", fs.NArg())
+			return nil
+		}
+		if err := bdynd.Remove(r, fs.Args()); err != nil {
 			return err
 		}
-		fmt.Fprintf(out, "removed %d path(s)\n", len(args)-1)
+		fmt.Fprintf(out, "removed %d path(s)\n", fs.NArg())
 		return nil
 	case "mv":
 		if len(args) != 3 {
@@ -694,7 +707,7 @@ Usage:
   bdy nd log
   bdy nd show <commit>
   bdy nd diff
-  bdy nd rm <path...>
+  bdy nd rm [--cached] <path...>
   bdy nd mv <old> <new>
   bdy nd restore <path...>
   bdy nd reset [--soft|--mixed|--hard] <ref>

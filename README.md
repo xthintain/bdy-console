@@ -271,6 +271,7 @@ Branch and tag commands are also available:
 bdy nd diff
 bdy nd restore a.txt
 bdy nd rm old.txt
+bdy nd rm --cached keep-local.txt
 bdy nd mv draft.txt docs/draft.txt
 bdy nd reset --hard HEAD~1
 bdy nd branch feature
