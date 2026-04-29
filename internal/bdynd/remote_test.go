@@ -2,6 +2,7 @@ package bdynd
 
 import (
 	"context"
+	"strings"
 	"testing"
 )
 
@@ -20,6 +21,22 @@ func TestPushUploadsReachableObjectsAndRefs(t *testing.T) {
 	head, _ := HeadCommit(r)
 	if ok, _ := remote.Exists(context.Background(), RemoteCommitPath("/apps/baiduyunStorage/nd/repos/demo", head)); !ok {
 		t.Fatal("head commit not uploaded")
+	}
+}
+
+func TestPushRejectsRepositoryWithoutCommit(t *testing.T) {
+	r := newTestRepo(t)
+	must(t, SetRemote(r, "origin", "/apps/baiduyunStorage/nd/repos/demo"))
+	remote := newMemoryRemote()
+	err := Push(context.Background(), r, remote, "origin")
+	if err == nil {
+		t.Fatal("push without commit unexpectedly succeeded")
+	}
+	if !strings.Contains(err.Error(), "nothing to push") {
+		t.Fatalf("err=%v", err)
+	}
+	if ok, _ := remote.Exists(context.Background(), "/apps/baiduyunStorage/nd/repos/demo/refs/heads/main"); ok {
+		t.Fatal("empty remote ref was uploaded")
 	}
 }
 

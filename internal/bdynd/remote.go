@@ -64,6 +64,12 @@ func Push(ctx context.Context, r Repo, remote RemoteStore, remoteName string) er
 	if err != nil {
 		return err
 	}
+	if strings.TrimSpace(head) == "" {
+		return fmt.Errorf("nothing to push; create a commit first")
+	}
+	if _, err := ReadCommit(r, head); err != nil {
+		return fmt.Errorf("nothing to push; HEAD commit is missing: %w", err)
+	}
 	if err := pushReachable(ctx, r, remote, remoteRoot, head); err != nil {
 		return err
 	}
