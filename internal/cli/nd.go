@@ -17,7 +17,7 @@ import (
 
 func cmdND(ctx context.Context, args []string, out io.Writer) error {
 	if len(args) == 0 {
-		return errors.New("usage: bdy nd init|status|add|commit|log|show|branch|switch|checkout|tag|lfs|remote|push|fetch|pull|clone|merge|diff|rm|mv|restore|reset")
+		return errors.New("usage: bdy nd init|status|add|commit|log|show|branch|switch|checkout|tag|lfs|remote|push|fetch|pull|clone|merge|stash|diff|rm|mv|restore|reset")
 	}
 	switch args[0] {
 	case "init":
@@ -235,10 +235,61 @@ func cmdND(ctx context.Context, args []string, out io.Writer) error {
 			fmt.Fprintf(out, "merged %s\n", args[1])
 		}
 		return err
+	case "stash":
+		return cmdNDStash(args[1:], out)
 	case "diff", "rm", "mv", "restore", "reset":
 		return fmt.Errorf("bdy nd %s is planned but not implemented yet", args[0])
 	default:
-		return errors.New("usage: bdy nd init|status|add|commit|log|show|branch|switch|checkout|tag|lfs|remote|push|fetch|pull|clone|merge|diff|rm|mv|restore|reset")
+		return errors.New("usage: bdy nd init|status|add|commit|log|show|branch|switch|checkout|tag|lfs|remote|push|fetch|pull|clone|merge|stash|diff|rm|mv|restore|reset")
+	}
+}
+
+func cmdNDStash(args []string, out io.Writer) error {
+	if len(args) == 0 {
+		return errors.New("usage: bdy nd stash push|list|pop")
+	}
+	r, err := bdynd.Open(".")
+	if err != nil {
+		return err
+	}
+	switch args[0] {
+	case "push":
+		fs := flag.NewFlagSet("nd stash push", flag.ContinueOnError)
+		fs.SetOutput(io.Discard)
+		msg := fs.String("m", "WIP", "")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		stash, err := bdynd.StashPush(r, *msg)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(out, "stashed %s\n", stash.ID)
+		return nil
+	case "list":
+		stashes, err := bdynd.StashList(r)
+		if err != nil {
+			return err
+		}
+		for _, stash := range stashes {
+			fmt.Fprintf(out, "%s %s\n", stash.ID, stash.Message)
+		}
+		return nil
+	case "pop":
+		if len(args) > 2 {
+			return errors.New("usage: bdy nd stash pop [id]")
+		}
+		id := ""
+		if len(args) == 2 {
+			id = args[1]
+		}
+		if err := bdynd.StashPop(r, id); err != nil {
+			return err
+		}
+		fmt.Fprintln(out, "applied stash")
+		return nil
+	default:
+		return errors.New("usage: bdy nd stash push|list|pop")
 	}
 }
 
@@ -421,6 +472,9 @@ Usage:
   bdy nd pull
   bdy nd clone <remote> [dir]
   bdy nd merge <branch>
+  bdy nd stash push [-m <message>]
+  bdy nd stash list
+  bdy nd stash pop [id]
   bdy nd lfs track <pattern...>
   bdy nd lfs untrack <pattern...>
   bdy nd lfs status
@@ -436,7 +490,7 @@ Repository:
 Remote object root:
   /apps/baiduyunStorage/nd/repos/<repo-name>
 
-Commands such as merge and stash are planned in the bdy nd implementation plan.`)
+Commands such as diff, rm, mv, restore, and reset are planned in the bdy nd implementation plan.`)
 }
 
 func printNDStatus(out io.Writer, st bdynd.StatusResult) {

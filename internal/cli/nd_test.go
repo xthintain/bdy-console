@@ -176,6 +176,39 @@ func TestBdyNDMergeFastForward(t *testing.T) {
 	}
 }
 
+func TestBdyNDStashPushListPop(t *testing.T) {
+	root := t.TempDir()
+	old, _ := os.Getwd()
+	t.Cleanup(func() { _ = os.Chdir(old) })
+	if err := os.Chdir(root); err != nil {
+		t.Fatal(err)
+	}
+	var out, errOut bytes.Buffer
+	mustRunCLI(t, []string{"nd", "init"}, &out, &errOut)
+	if err := os.WriteFile("note.txt", []byte("base\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mustRunCLI(t, []string{"nd", "add", "note.txt"}, &out, &errOut)
+	mustRunCLI(t, []string{"nd", "commit", "-m", "base"}, &out, &errOut)
+	if err := os.WriteFile("note.txt", []byte("dirty\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	mustRunCLI(t, []string{"nd", "stash", "push", "-m", "wip"}, &out, &errOut)
+	if got, err := os.ReadFile("note.txt"); err != nil || string(got) != "base\n" {
+		t.Fatalf("after stash note=%q err=%v", got, err)
+	}
+	out.Reset()
+	mustRunCLI(t, []string{"nd", "stash", "list"}, &out, &errOut)
+	if !strings.Contains(out.String(), "wip") {
+		t.Fatalf("stash list=%q", out.String())
+	}
+	mustRunCLI(t, []string{"nd", "stash", "pop"}, &out, &errOut)
+	if got, err := os.ReadFile("note.txt"); err != nil || string(got) != "dirty\n" {
+		t.Fatalf("after pop note=%q err=%v", got, err)
+	}
+}
+
 func mustRunCLI(t *testing.T, args []string, out, errOut *bytes.Buffer) {
 	t.Helper()
 	out.Reset()
