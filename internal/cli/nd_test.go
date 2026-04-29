@@ -40,3 +40,36 @@ func TestBdyNDInitAddCommitLog(t *testing.T) {
 		t.Fatalf("log=%q", out.String())
 	}
 }
+
+func TestBdyNDBranchSwitchTag(t *testing.T) {
+	root := t.TempDir()
+	old, _ := os.Getwd()
+	t.Cleanup(func() { _ = os.Chdir(old) })
+	if err := os.Chdir(root); err != nil {
+		t.Fatal(err)
+	}
+	var out, errOut bytes.Buffer
+	mustRunCLI(t, []string{"nd", "init"}, &out, &errOut)
+	if err := os.WriteFile("note.txt", []byte("main\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mustRunCLI(t, []string{"nd", "add", "note.txt"}, &out, &errOut)
+	mustRunCLI(t, []string{"nd", "commit", "-m", "main"}, &out, &errOut)
+	mustRunCLI(t, []string{"nd", "branch", "feature"}, &out, &errOut)
+	mustRunCLI(t, []string{"nd", "switch", "feature"}, &out, &errOut)
+	mustRunCLI(t, []string{"nd", "tag", "v1"}, &out, &errOut)
+	out.Reset()
+	mustRunCLI(t, []string{"nd", "branch"}, &out, &errOut)
+	if !strings.Contains(out.String(), "* feature") {
+		t.Fatalf("branch output=%q", out.String())
+	}
+}
+
+func mustRunCLI(t *testing.T, args []string, out, errOut *bytes.Buffer) {
+	t.Helper()
+	out.Reset()
+	errOut.Reset()
+	if code := Run(args, out, errOut); code != 0 {
+		t.Fatalf("%v code=%d err=%s", args, code, errOut.String())
+	}
+}

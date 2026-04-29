@@ -12,7 +12,7 @@ import (
 
 func cmdND(args []string, out io.Writer) error {
 	if len(args) == 0 {
-		return errors.New("usage: bdy nd init|status|add|commit|log|show|diff|rm|mv|restore|reset")
+		return errors.New("usage: bdy nd init|status|add|commit|log|show|branch|switch|checkout|tag|diff|rm|mv|restore|reset")
 	}
 	switch args[0] {
 	case "init":
@@ -90,10 +90,84 @@ func cmdND(args []string, out io.Writer) error {
 		}
 		fmt.Fprintf(out, "commit %s\nTree: %s\nParent: %s\nDate: %s\n\n    %s\n", c.OID, c.Tree, c.Parent, c.Time.Format("2006-01-02 15:04:05 -0700"), c.Message)
 		return nil
+	case "branch":
+		r, err := bdynd.Open(".")
+		if err != nil {
+			return err
+		}
+		if len(args) == 1 {
+			branches, err := bdynd.ListBranches(r)
+			if err != nil {
+				return err
+			}
+			for _, branch := range branches {
+				mark := " "
+				if branch.Current {
+					mark = "*"
+				}
+				fmt.Fprintf(out, "%s %s\n", mark, branch.Name)
+			}
+			return nil
+		}
+		head, err := bdynd.HeadCommit(r)
+		if err != nil {
+			return err
+		}
+		if err := bdynd.CreateBranch(r, args[1], head); err != nil {
+			return err
+		}
+		fmt.Fprintf(out, "created branch %s\n", args[1])
+		return nil
+	case "switch":
+		if len(args) != 2 {
+			return errors.New("usage: bdy nd switch <branch>")
+		}
+		r, err := bdynd.Open(".")
+		if err != nil {
+			return err
+		}
+		if err := bdynd.Switch(r, args[1]); err != nil {
+			return err
+		}
+		fmt.Fprintf(out, "switched to %s\n", args[1])
+		return nil
+	case "checkout":
+		if len(args) != 2 {
+			return errors.New("usage: bdy nd checkout <ref>")
+		}
+		r, err := bdynd.Open(".")
+		if err != nil {
+			return err
+		}
+		if err := bdynd.Checkout(r, args[1]); err != nil {
+			return err
+		}
+		fmt.Fprintf(out, "checked out %s\n", args[1])
+		return nil
+	case "tag":
+		if len(args) < 2 || len(args) > 3 {
+			return errors.New("usage: bdy nd tag <name> [ref]")
+		}
+		r, err := bdynd.Open(".")
+		if err != nil {
+			return err
+		}
+		oid := ""
+		if len(args) == 3 {
+			oid, err = bdynd.ResolveRef(r, args[2])
+			if err != nil {
+				return err
+			}
+		}
+		if err := bdynd.CreateTag(r, args[1], oid); err != nil {
+			return err
+		}
+		fmt.Fprintf(out, "created tag %s\n", args[1])
+		return nil
 	case "diff", "rm", "mv", "restore", "reset":
 		return fmt.Errorf("bdy nd %s is planned but not implemented yet", args[0])
 	default:
-		return errors.New("usage: bdy nd init|status|add|commit|log|show|diff|rm|mv|restore|reset")
+		return errors.New("usage: bdy nd init|status|add|commit|log|show|branch|switch|checkout|tag|diff|rm|mv|restore|reset")
 	}
 }
 
@@ -107,6 +181,10 @@ Usage:
   bdy nd commit -m <message>
   bdy nd log
   bdy nd show <commit>
+  bdy nd branch [name]
+  bdy nd switch <branch>
+  bdy nd checkout <ref>
+  bdy nd tag <name> [ref]
 
 Repository:
   .bdynd/
@@ -114,8 +192,8 @@ Repository:
 Remote object root:
   /apps/baiduyunStorage/nd/repos/<repo-name>
 
-Commands such as branch, switch, lfs, push, pull, clone, merge, and stash are
-planned in the bdy nd implementation plan.`)
+Commands such as built-in lfs, push, pull, clone, merge, and stash are planned
+in the bdy nd implementation plan.`)
 }
 
 func printNDStatus(out io.Writer, st bdynd.StatusResult) {

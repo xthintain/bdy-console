@@ -229,7 +229,17 @@ Local repository state is stored under:
 .bdynd/
 ```
 
-The first implemented local commands are `init`, `add`, `commit`, `status`, `log`, and `show`. Branches, built-in `nd lfs`, remote push/pull, clone, merge, and advanced porcelain are planned in `docs/superpowers/plans/2026-04-29-bdy-nd-lfs.md`.
+The implemented local commands are `init`, `add`, `commit`, `status`, `log`, `show`, `branch`, `switch`, `checkout`, and `tag`. Built-in `nd lfs`, remote push/pull, clone, merge, and advanced porcelain are planned in `docs/superpowers/plans/2026-04-29-bdy-nd-lfs.md`.
+
+Branch and tag commands are also available:
+
+```bash
+bdy nd branch feature
+bdy nd switch feature
+bdy nd branch
+bdy nd tag v1
+bdy nd checkout v1
+```
 
 ## Snapshot Sync
 
