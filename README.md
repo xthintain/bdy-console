@@ -329,6 +329,141 @@ If no remote is configured, `bdy nd push`, `fetch`, `pull`, and `lfs push/fetch/
 /apps/baiduyunStorage/nd/repos/<current-directory-name>
 ```
 
+## Advanced Examples
+
+### Shell-Scoped Cloud Workspace
+
+Use `cmd cd` when you want several cloud operations to target the same app-space folder without changing the global default:
+
+```bash
+bdy cmd mkdir -p datasets/2026-04/raw
+eval "$(bdy cmd cd datasets/2026-04)"
+bdy cmd pwd
+bdy cmd touch raw/ingest.log
+bdy cmd ls -al raw
+bdy cmd grep -i report raw
+bdy cmd history -n 10
+```
+
+The `BDY_CMD_CWD` environment variable only affects the current shell. A new terminal falls back to `/apps/baiduyunStorage`.
+
+### Whole-Netdisk Inspection
+
+Use `home` when you intentionally want to operate outside the isolated app folder:
+
+```bash
+bdy home cmd ls /
+bdy home cmd find -type d -name '.*backup.*' /
+bdy home cmd grep -i invoice /Document
+bdy home cmd cat /Document/notes/readme.txt
+```
+
+### Versioned Project With Remote
+
+Create a project, make a branch, merge it, then push the version database to Baidu Netdisk:
+
+```bash
+mkdir research-notes
+cd research-notes
+bdy nd init
+printf 'baseline\n' > notes.txt
+bdy nd add notes.txt
+bdy nd commit -m 'baseline notes'
+
+bdy nd branch experiment
+bdy nd switch experiment
+printf 'new observation\n' >> notes.txt
+bdy nd add notes.txt
+bdy nd commit -m 'add experiment observation'
+
+bdy nd switch main
+bdy nd merge experiment
+bdy nd tag v1
+bdy nd remote set-url origin /apps/baiduyunStorage/nd/repos/research-notes
+bdy nd push
+```
+
+Clone or update another checkout:
+
+```bash
+bdy nd clone /apps/baiduyunStorage/nd/repos/research-notes research-notes-copy
+cd research-notes-copy
+bdy nd fetch
+bdy nd pull
+```
+
+### Built-In Large File Tracking
+
+Track large binary data inside `bdy nd` without using Git or Git LFS:
+
+```bash
+bdy nd init
+bdy nd lfs track '*.bin'
+bdy nd lfs track '*.zip'
+cp /data/model.bin .
+cp /data/archive.zip .
+bdy nd add model.bin archive.zip
+bdy nd commit -m 'add large dataset artifacts'
+bdy nd lfs status
+bdy nd lfs push
+bdy nd push
+```
+
+On another machine:
+
+```bash
+bdy nd clone /apps/baiduyunStorage/nd/repos/model-store model-store
+cd model-store
+bdy nd lfs fetch
+bdy nd lfs checkout
+```
+
+### Batch Object Store Workflow
+
+Use pack files for high-throughput storage when many files should become fewer larger remote objects:
+
+```bash
+bdy nd init
+mkdir -p logs/2026-04-29 images
+cp /var/log/app/*.log logs/2026-04-29/
+cp /data/camera/*.png images/
+bdy nd add logs images
+bdy nd commit -m 'batch import 2026-04-29'
+
+bdy nd pack --name ingest-2026-04-29
+bdy nd index
+bdy nd search --type log --name error --since 2026-04-29
+bdy nd search --type png --since 2026-04-01 --until 2026-04-30
+bdy nd pack push
+```
+
+Fetch a known pack ID and search it locally:
+
+```bash
+bdy nd init
+bdy nd remote set-url origin /apps/baiduyunStorage/nd/repos/data-lake
+bdy nd pack fetch 20260429055009-7b4c0a60da9d
+bdy nd index
+bdy nd search --type log --name ingest
+```
+
+### Stash, Restore, And Reset
+
+Save dirty work, inspect changes, restore one file, or reset a branch:
+
+```bash
+printf 'temporary note\n' >> notes.txt
+bdy nd diff
+bdy nd stash push -m 'temporary notes'
+bdy nd status
+bdy nd stash list
+bdy nd stash pop
+
+bdy nd restore notes.txt
+bdy nd reset --mixed HEAD~1
+bdy nd reset --hard HEAD
+```
+
 ## Snapshot Sync
 
 The older snapshot sync mode stores metadata in `.bdy/` and syncs committed snapshots to:
