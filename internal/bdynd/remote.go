@@ -146,6 +146,34 @@ func Pull(ctx context.Context, r Repo, remote RemoteStore, remoteName string) er
 	return UpdateHead(r, remoteOID)
 }
 
+func ForcePull(ctx context.Context, r Repo, remote RemoteStore, remoteName string) error {
+	if remoteName == "" {
+		remoteName = DefaultRemote
+	}
+	if err := Fetch(ctx, r, remote, remoteName); err != nil {
+		return err
+	}
+	branch := r.Config.DefaultBranch
+	if branch == "" {
+		branch = DefaultBranch
+	}
+	remoteOID, err := ResolveRef(r, "refs/remotes/"+remoteName+"/"+branch)
+	if err != nil {
+		return err
+	}
+	c, err := ReadCommit(r, remoteOID)
+	if err != nil {
+		return err
+	}
+	if err := CheckoutTree(r, c.Tree); err != nil {
+		return err
+	}
+	if err := SaveIndex(r, indexFromEntries(c.Entries)); err != nil {
+		return err
+	}
+	return UpdateHead(r, remoteOID)
+}
+
 func Clone(ctx context.Context, remote RemoteStore, remoteRoot, dest string) (Repo, error) {
 	remoteRoot = strings.TrimRight(strings.TrimSpace(remoteRoot), "/")
 	if remoteRoot == "" {
@@ -153,6 +181,9 @@ func Clone(ctx context.Context, remote RemoteStore, remoteRoot, dest string) (Re
 	}
 	if dest == "" {
 		dest = filepath.Base(remoteRoot)
+	}
+	if err := ensureCloneDestination(dest); err != nil {
+		return Repo{}, err
 	}
 	if err := os.MkdirAll(dest, 0o755); err != nil {
 		return Repo{}, err
@@ -165,6 +196,20 @@ func Clone(ctx context.Context, remote RemoteStore, remoteRoot, dest string) (Re
 		return Repo{}, err
 	}
 	return r, nil
+}
+
+func ensureCloneDestination(dest string) error {
+	items, err := os.ReadDir(dest)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if len(items) > 0 {
+		return fmt.Errorf("destination %s is not empty", dest)
+	}
+	return nil
 }
 
 func RemoteRefPath(remoteRoot, ref string) string {

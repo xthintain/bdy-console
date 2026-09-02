@@ -2,20 +2,24 @@
 
 This document lists the supported command surfaces and marks whether each command is allowed when using temporary read-only auth.
 
-Temporary read-only auth is local policy enforcement in `bdy`. Baidu Netdisk OAuth for this app still uses the platform scope `basic,netdisk`; the CLI blocks write operations before they reach the API.
+Temporary read-only auth is local policy enforcement in `bdy`. Tokens are produced by your SDK/auth layer and stored under the user config directory.
 
 ## Authentication
 
 ```bash
-bdy config set-app --app-id ID --app-key KEY --secret-key SECRET --sign-key SIGN
-bdy auth login
-bdy auth login --temporary 1d
+export BDY_ACCESS_TOKEN='...'
+export BDY_TOKEN_EXPIRES_IN=2592000
+bdy auth import-token
+bdy auth import-token --temporary 1d
 bdy auth status
+bdy config clear-app
 ```
 
-`bdy auth login --temporary 1d` stores a temporary token in `~/.config/bdy/temporary.json`, marks it read-only, and limits its lifetime to the requested duration. Supported duration examples: `12h`, `24h`, `1d`, `7d`.
+For direct project integration, prefer token-only mode. `BDY_ACCESS_TOKEN` can be produced by an external SDK layer and is enough for transfer commands while it is valid.
 
-Temporary read-only mode allows `auth status` and another `auth login`. It blocks `config set-app` while the temporary token is active.
+`bdy auth import-token --temporary 1d` stores a temporary token in `~/.config/bdy/temporary.json`, marks it read-only, and limits its lifetime to the requested duration. Supported duration examples: `12h`, `24h`, `1d`, `7d`.
+
+Temporary read-only mode allows `auth status` and another temporary `auth import-token`. It blocks write commands while the temporary token is active.
 
 ## Cloud App Space
 

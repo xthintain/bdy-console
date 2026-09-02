@@ -95,16 +95,20 @@ func (o OAuth) Refresh(ctx context.Context, cfg config.Config) (config.Config, e
 	return cfg, config.Save(cfg)
 }
 
+// EnsureToken returns the active token config. A valid token is used directly,
+// so token-only environments (env var or imported token) do not need app
+// credentials. When no valid token exists but app credentials are configured,
+// it attempts an automatic refresh.
 func EnsureToken(ctx context.Context) (config.Config, error) {
 	cfg, err := config.LoadActive()
 	if err != nil {
 		return cfg, err
 	}
-	if !cfg.HasApp() {
-		return cfg, errors.New("app credentials missing; run bdy config set-app first")
-	}
 	if cfg.HasToken() {
 		return cfg, nil
+	}
+	if !cfg.HasApp() {
+		return cfg, errors.New("not logged in or token expired; provide BDY_ACCESS_TOKEN or import a token from your SDK")
 	}
 	return New().Refresh(ctx, cfg)
 }

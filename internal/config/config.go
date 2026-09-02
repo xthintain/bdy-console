@@ -6,14 +6,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 )
 
 type Config struct {
-	AppID              string    `json:"app_id,omitempty"`
 	AppKey             string    `json:"app_key,omitempty"`
 	SecretKey          string    `json:"secret_key,omitempty"`
-	SignKey            string    `json:"sign_key,omitempty"`
 	AccessToken        string    `json:"access_token,omitempty"`
 	RefreshToken       string    `json:"refresh_token,omitempty"`
 	ExpiresAt          time.Time `json:"expires_at,omitempty"`
@@ -112,6 +111,11 @@ func SaveTemporary(cfg Config) error {
 }
 
 func LoadActive() (Config, error) {
+	if env, ok, err := LoadEnvToken(); err != nil {
+		return Config{}, err
+	} else if ok {
+		return env, nil
+	}
 	temp, err := LoadTemporary()
 	if err != nil {
 		return Config{}, err
@@ -120,6 +124,44 @@ func LoadActive() (Config, error) {
 		return temp, nil
 	}
 	return Load()
+}
+
+func LoadEnvToken() (Config, bool, error) {
+	token := os.Getenv("BDY_ACCESS_TOKEN")
+	if token == "" {
+		return Config{}, false, nil
+	}
+	expiresAt, err := envTokenExpiry()
+	if err != nil {
+		return Config{}, false, err
+	}
+	cfg := Config{
+		AccessToken:  token,
+		RefreshToken: os.Getenv("BDY_REFRESH_TOKEN"),
+		ExpiresAt:    expiresAt,
+	}
+	if os.Getenv("BDY_READ_ONLY") == "1" || os.Getenv("BDY_READ_ONLY") == "true" {
+		cfg.ReadOnly = true
+	}
+	return cfg, true, nil
+}
+
+func envTokenExpiry() (time.Time, error) {
+	if raw := os.Getenv("BDY_TOKEN_EXPIRES_AT"); raw != "" {
+		t, err := time.Parse(time.RFC3339, raw)
+		if err != nil {
+			return time.Time{}, fmt.Errorf("parse BDY_TOKEN_EXPIRES_AT: %w", err)
+		}
+		return t, nil
+	}
+	if raw := os.Getenv("BDY_TOKEN_EXPIRES_IN"); raw != "" {
+		seconds, err := strconv.Atoi(raw)
+		if err != nil || seconds <= 0 {
+			return time.Time{}, fmt.Errorf("parse BDY_TOKEN_EXPIRES_IN: %q", raw)
+		}
+		return time.Now().Add(time.Duration(seconds) * time.Second), nil
+	}
+	return time.Now().Add(24 * time.Hour), nil
 }
 
 func savePath(path string, cfg Config) error {

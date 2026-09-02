@@ -46,3 +46,15 @@ func TestPushAndFetchPacksRoundTrip(t *testing.T) {
 		t.Fatalf("packs=%+v", packs)
 	}
 }
+
+func TestFetchPacksRejectsUnsafeID(t *testing.T) {
+	target := newTestRepo(t)
+	remote := newMemoryRemote()
+	err := FetchPacks(context.Background(), target, remote, "/apps/baiduyunStorage/nd/repos/demo", []string{"../../escape"})
+	if err == nil {
+		t.Fatal("unsafe pack id unexpectedly succeeded")
+	}
+	if _, statErr := os.Stat(filepath.Join(target.Dir, "escape.json")); !os.IsNotExist(statErr) {
+		t.Fatalf("unsafe path was written or stat failed unexpectedly: %v", statErr)
+	}
+}

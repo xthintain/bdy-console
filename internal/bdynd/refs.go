@@ -104,6 +104,17 @@ func CreateBranch(r Repo, name, oid string) error {
 	return UpdateRef(r, "refs/heads/"+name, oid)
 }
 
+func DeleteBranch(r Repo, name string) error {
+	if err := validateRefName(name); err != nil {
+		return err
+	}
+	current, _ := CurrentBranch(r)
+	if name == current {
+		return fmt.Errorf("cannot delete current branch %q", name)
+	}
+	return os.Remove(filepath.Join(r.Dir, "refs", "heads", name))
+}
+
 func ListBranches(r Repo) ([]Branch, error) {
 	current, _ := CurrentBranch(r)
 	dir := filepath.Join(r.Dir, "refs", "heads")
@@ -178,6 +189,13 @@ func CreateTag(r Repo, name, oid string) error {
 		}
 	}
 	return UpdateRef(r, "refs/tags/"+name, oid)
+}
+
+func DeleteTag(r Repo, name string) error {
+	if err := validateRefName(name); err != nil {
+		return err
+	}
+	return os.Remove(filepath.Join(r.Dir, "refs", "tags", name))
 }
 
 func validateRefName(name string) error {

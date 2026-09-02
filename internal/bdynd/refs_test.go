@@ -61,6 +61,28 @@ func TestTagPointsAtHead(t *testing.T) {
 	}
 }
 
+func TestDeleteBranchAndTag(t *testing.T) {
+	r := repoWithOneCommit(t, "first")
+	head, err := HeadCommit(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	must(t, CreateBranch(r, "feature", head))
+	must(t, CreateTag(r, "v1", head))
+	if err := DeleteBranch(r, "feature"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ResolveRef(r, "feature"); err == nil {
+		t.Fatal("deleted branch still resolves")
+	}
+	if err := DeleteTag(r, "v1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ResolveRef(r, "v1"); err == nil {
+		t.Fatal("deleted tag still resolves")
+	}
+}
+
 func must(t *testing.T, err error) {
 	t.Helper()
 	if err != nil {

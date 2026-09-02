@@ -32,3 +32,25 @@ func TestRequestDeviceCodeUsesDocumentedParams(t *testing.T) {
 		t.Fatalf("unexpected response: %+v", got)
 	}
 }
+
+func TestPollTokenUsesDeviceGrant(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/oauth/2.0/token" {
+			t.Fatalf("path = %s", r.URL.Path)
+		}
+		q := r.URL.Query()
+		if q.Get("grant_type") != "device_token" || q.Get("client_id") != "ak" || q.Get("client_secret") != "sk" || q.Get("code") != "dev" {
+			t.Fatalf("bad query: %s", r.URL.RawQuery)
+		}
+		_ = json.NewEncoder(w).Encode(Token{AccessToken: "at", RefreshToken: "rt", ExpiresIn: 2592000})
+	}))
+	defer server.Close()
+
+	tok, err := (OAuth{BaseURL: server.URL, HTTP: server.Client()}).PollToken(context.Background(), "ak", "sk", "dev")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tok.AccessToken != "at" || tok.RefreshToken != "rt" {
+		t.Fatalf("unexpected token: %+v", tok)
+	}
+}

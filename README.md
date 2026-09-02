@@ -2,7 +2,7 @@
 
 `bdy` is a Linux command-line tool for managing Baidu Netdisk through the Baidu Netdisk Open Platform. It provides:
 
-- OAuth device-code login.
+- SDK token import.
 - Bash-style cloud file commands under `/apps/baiduyunStorage`.
 - `bdy nd` Git-like NetDisk project versioning under `.bdynd/`.
 - Git-LFS-style large file storage backed by Baidu Netdisk.
@@ -34,30 +34,29 @@ The secure build strips symbols, removes build paths, emits a SHA-256 checksum, 
 
 ## Authentication
 
-### Get App Credentials
+`bdy` transfer commands use Baidu Netdisk HTTP APIs with an `access_token`. Obtain that token in your SDK/auth layer, then pass it to `bdy`.
 
-Create or open your Baidu Netdisk Open Platform application before running `bdy auth login`.
+### Token-only mode
 
-1. Open the Baidu Netdisk Open Platform developer console: <https://pan.baidu.com/union>.
-2. Sign in with your Baidu account and complete the required developer verification if the console asks for it.
-3. Create an application for Baidu Netdisk Open Platform API access.
-4. Open the application detail page and copy these values:
-   - `AppID`
-   - `AppKey`
-   - `SecretKey`
-   - `SignKey`
-5. Keep those values private. Treat `SecretKey`, `SignKey`, access tokens, and refresh tokens as secrets.
-
-### Configure Local Credentials
-
-Configure your Baidu Netdisk Open Platform app credentials. Use your own values; do not commit them.
+Use this when another program or SDK exports a token for `bdy`:
 
 ```bash
-bdy config set-app \
-  --app-id '<AppID>' \
-  --app-key '<AppKey>' \
-  --secret-key '<SecretKey>' \
-  --sign-key '<SignKey>'
+export BDY_ACCESS_TOKEN='...'
+export BDY_REFRESH_TOKEN='...'          # optional
+export BDY_TOKEN_EXPIRES_IN=2592000     # optional, seconds; default is 24h
+bdy auth status
+```
+
+You can force local read-only behavior for an injected token:
+
+```bash
+export BDY_READ_ONLY=1
+```
+
+Rewrite the local config file to ensure no app credentials remain there:
+
+```bash
+bdy config clear-app
 ```
 
 The config is saved to:
@@ -66,21 +65,13 @@ The config is saved to:
 ~/.config/bdy/config.json
 ```
 
-The file is written with mode `0600`. It may contain app credentials, access tokens, and refresh tokens, so it must not be uploaded or committed.
+The file is written with mode `0600`. It may contain access tokens and refresh tokens, so it must not be uploaded or committed.
 
-Start device-code login:
+Persist a token produced by your SDK:
 
 ```bash
-bdy auth login
+bdy auth import-token
 ```
-
-The command prints:
-
-- a verification URL
-- a user code
-- a QR-code URL
-
-Open the URL, enter the code or scan the QR code, and approve the `basic,netdisk` scope.
 
 Check login status:
 
@@ -88,10 +79,10 @@ Check login status:
 bdy auth status
 ```
 
-Temporary read-only login:
+Temporary read-only token import:
 
 ```bash
-bdy auth login --temporary 1d
+bdy auth import-token --temporary 1d
 ```
 
 Temporary auth is stored in `~/.config/bdy/temporary.json`, expires after the requested duration, and is restricted by `bdy` to clone, view, fetch, pull, download, index, and search style commands. Write commands return `temporary read-only auth forbids write operation`.
@@ -322,6 +313,16 @@ Remote pack sync stores files under:
 ```
 
 `pack push` uploads all local pack files and manifests that are not already present remotely. `pack fetch` currently fetches explicit pack IDs; use `bdy nd index` after fetching to inspect local manifests.
+
+Upload tuning:
+
+```bash
+BDY_UPLOAD_CONCURRENCY=8 bdy nd push
+BDY_UPLOAD_CONCURRENCY=8 BDY_UPLOAD_CHUNK_SIZE=4M bdy sync push
+BDY_UPLOAD_CONCURRENCY=8 BDY_UPLOAD_CHUNK_SIZE=auto bdy sync push
+```
+
+`BDY_UPLOAD_CONCURRENCY` defaults to `8` and is capped at `16`. `BDY_UPLOAD_CHUNK_SIZE=auto` chooses a chunk size from the authorized account membership level while keeping enough chunks to keep upload workers busy. Manual chunk sizes such as `4M`, `16M`, and `32M` are useful for benchmarking.
 
 Temporarily save dirty worktree changes without creating a commit:
 

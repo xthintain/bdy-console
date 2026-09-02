@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"baiduyunStorage/internal/config"
+	"baiduyunStorage/internal/repo"
 )
 
 func TestHelpAndInitStatusSmoke(t *testing.T) {
@@ -56,7 +58,7 @@ func TestDetailedHelp(t *testing.T) {
 		{
 			name: "cmd help",
 			args: []string{"cmd", "--help"},
-			want: []string{"Usage:", "bdy cmd ls [-al] [path]", "eval \"$(bdy cmd cd git)\"", "mkdir [-p]"},
+			want: []string{"Usage:", "bdy cmd ls [-al] [path]", "eval \"$(bdy cmd cd git)\"", "download <remote-path>", "mkdir [-p]"},
 		},
 		{
 			name: "lfs help",
@@ -66,12 +68,12 @@ func TestDetailedHelp(t *testing.T) {
 		{
 			name: "auth help",
 			args: []string{"auth", "--help"},
-			want: []string{"bdy auth login", "bdy auth status", "device-code"},
+			want: []string{"bdy auth import-token", "bdy auth status", "SDK token"},
 		},
 		{
 			name: "config help",
 			args: []string{"config", "--help"},
-			want: []string{"bdy config set-app", "--app-id", "--sign-key"},
+			want: []string{"bdy config clear-app", "BDY_ACCESS_TOKEN", "Token-only mode"},
 		},
 		{
 			name: "help command help",
@@ -87,6 +89,11 @@ func TestDetailedHelp(t *testing.T) {
 			name: "home command help",
 			args: []string{"home", "cmd", "mkdir", "--help"},
 			want: []string{"bdy home mkdir [-p] <path...>", "Equivalent:", "bdy home cmd mkdir"},
+		},
+		{
+			name: "home search help",
+			args: []string{"home", "search", "--help"},
+			want: []string{"bdy home search", "Baidu remote search", "'*.mp4'"},
 		},
 		{
 			name: "sync help",
@@ -132,8 +139,6 @@ func TestTemporaryReadOnlyAuthBlocksWriteCommands(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("BDY_CONFIG_HOME", dir)
 	cfg := config.Config{
-		AppKey:             "key",
-		SecretKey:          "secret",
 		AccessToken:        "temporary-token",
 		RefreshToken:       "temporary-refresh",
 		ExpiresAt:          time.Now().Add(time.Hour),
@@ -159,6 +164,15 @@ func TestTemporaryReadOnlyAuthBlocksWriteCommands(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "temporary") || !strings.Contains(out.String(), "read-only") {
 		t.Fatalf("status=%q", out.String())
+	}
+
+	out.Reset()
+	errOut.Reset()
+	if code := Run([]string{"auth", "import-token"}, &out, &errOut); code == 0 {
+		t.Fatal("persistent auth import unexpectedly allowed during temporary read-only auth")
+	}
+	if !strings.Contains(errOut.String(), "temporary read-only auth forbids write operation") {
+		t.Fatalf("err=%q", errOut.String())
 	}
 }
 
@@ -238,6 +252,64 @@ func TestCmdCDPersistsForCurrentShellSession(t *testing.T) {
 	}
 	if got, want := cmdPath("repo.txt"), "/apps/baiduyunStorage/git/repo.txt"; got != want {
 		t.Fatalf("session cmdPath=%q want %q", got, want)
+	}
+}
+
+func TestCloudFileREPLHandlesLocalCWD(t *testing.T) {
+	var out bytes.Buffer
+	input := strings.NewReader("pwd\ncd git\npwd\ncd ..\npwd\nexit\n")
+	err := runCloudFileREPL(context.Background(), input, &out, cloudFileSpace{
+		Name:    "cmd",
+		Root:    repo.CmdRoot,
+		Resolve: cmdPath,
+		AllowCD: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := out.String()
+	for _, want := range []string{"/apps/baiduyunStorage", "/apps/baiduyunStorage/git"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("repl output missing %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestParseInteractiveLineSupportsQuotes(t *testing.T) {
+	args, err := parseInteractiveLine(`search -E "^贤者.*$" "/娱乐/动漫"`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"search", "-E", "^贤者.*$", "/娱乐/动漫"}
+	if strings.Join(args, "\x00") != strings.Join(want, "\x00") {
+		t.Fatalf("args=%q want %q", args, want)
+	}
+}
+
+func TestDownloadDestinationUsesRemoteFilenameForDirectory(t *testing.T) {
+	dir := t.TempDir()
+	got, err := downloadDestination("/apps/baiduyunStorage/config.json", dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := filepath.Join(dir, "config.json"); got != want {
+		t.Fatalf("dest=%q want %q", got, want)
+	}
+
+	got, err = downloadDestination("/config.json", ".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := filepath.Join(".", "config.json"); got != want {
+		t.Fatalf("dest=%q want %q", got, want)
+	}
+
+	got, err = downloadDestination("/config.json", "local.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "local.json" {
+		t.Fatalf("dest=%q want local.json", got)
 	}
 }
 
@@ -324,5 +396,80 @@ func TestParseCommonCmdArgs(t *testing.T) {
 	}
 	if !searchOpts.IgnoreCase || !searchOpts.Invert || searchOpts.Type != "f" || searchOpts.Pattern != "token" || searchOpts.Path != "docs" {
 		t.Fatalf("search opts=%+v", searchOpts)
+	}
+
+	searchOpts, err = parseSearchArgs("search", []string{"mp4"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if searchOpts.Pattern != "mp4" || searchOpts.Path != "." {
+		t.Fatalf("search opts=%+v", searchOpts)
+	}
+
+	searchOpts, err = parseSearchArgs("search", []string{"-E", `.*\.mp4$`})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !searchOpts.Regex || searchOpts.Pattern != `.*\.mp4$` {
+		t.Fatalf("regex search opts=%+v", searchOpts)
+	}
+}
+
+func TestCmdSearchMatchSupportsGlobAndPlainText(t *testing.T) {
+	tests := []struct {
+		name    string
+		pattern string
+		path    string
+		file    string
+		want    bool
+	}{
+		{name: "glob extension", pattern: "*.mp4", path: "/movies/demo.mp4", file: "demo.mp4", want: true},
+		{name: "plain extension", pattern: "mp4", path: "/movies/demo.mp4", file: "demo.mp4", want: true},
+		{name: "case insensitive", pattern: "*.mp4", path: "/movies/DEMO.MP4", file: "DEMO.MP4", want: true},
+		{name: "no match", pattern: "*.mp4", path: "/movies/demo.txt", file: "demo.txt", want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := searchMatch(cmdSearchOptions{Command: "search", Pattern: tt.pattern}, tt.path, tt.file)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != tt.want {
+				t.Fatalf("match=%v want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCmdSearchMatchSupportsRegex(t *testing.T) {
+	opts := cmdSearchOptions{Pattern: `^demo-[0-9]+\.mp4$`, Regex: true, IgnoreCase: true}
+	got, err := searchMatch(opts, "/movies/DEMO-42.MP4", "DEMO-42.MP4")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got {
+		t.Fatal("regex did not match")
+	}
+	got, err = searchMatch(opts, "/movies/demo-final.mp4", "demo-final.mp4")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got {
+		t.Fatal("regex unexpectedly matched")
+	}
+}
+
+func TestSearchRemoteKeyExtractsUsefulToken(t *testing.T) {
+	tests := map[string]string{
+		"*.mp4":              "mp4",
+		"movie*.mp4":         "movie",
+		"report-final":       "report-final",
+		"*":                  "",
+		`^demo-[0-9]+\.mp4$`: "demo",
+	}
+	for input, want := range tests {
+		if got := searchRemoteKey(input); got != want {
+			t.Fatalf("searchRemoteKey(%q)=%q want %q", input, got, want)
+		}
 	}
 }

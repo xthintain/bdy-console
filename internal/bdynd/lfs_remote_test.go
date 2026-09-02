@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -74,6 +75,25 @@ func (m *memoryRemote) DownloadFile(ctx context.Context, remotePath, localPath s
 func (m *memoryRemote) Exists(ctx context.Context, remotePath string) (bool, error) {
 	_, ok := m.files[remotePath]
 	return ok, nil
+}
+
+func (m *memoryRemote) ListFiles(ctx context.Context, remoteRoot string) ([]string, error) {
+	var paths []string
+	prefix := strings.TrimRight(remoteRoot, "/") + "/"
+	for path := range m.files {
+		if path == strings.TrimRight(remoteRoot, "/") || strings.HasPrefix(path, prefix) {
+			paths = append(paths, path)
+		}
+	}
+	sort.Strings(paths)
+	return paths, nil
+}
+
+func (m *memoryRemote) DeleteFiles(ctx context.Context, remotePaths []string) error {
+	for _, path := range remotePaths {
+		delete(m.files, path)
+	}
+	return nil
 }
 
 func cloneRepoMetadataOnly(t *testing.T, source Repo) Repo {

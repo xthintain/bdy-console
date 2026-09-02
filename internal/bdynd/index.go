@@ -71,6 +71,29 @@ func Add(r Repo, paths []string) error {
 	return SaveIndex(r, idx)
 }
 
+func ApplyIgnore(r Repo) ([]string, error) {
+	idx, err := LoadIndex(r)
+	if err != nil {
+		return nil, err
+	}
+	ignore, err := LoadIgnore(r)
+	if err != nil {
+		return nil, err
+	}
+	var removed []string
+	for path, entry := range idx.Entries {
+		if ignore.Ignored(path, entry.Kind != KindBlob && entry.Kind != KindLFS) {
+			removed = append(removed, path)
+			delete(idx.Entries, path)
+		}
+	}
+	sort.Strings(removed)
+	if len(removed) == 0 {
+		return removed, nil
+	}
+	return removed, SaveIndex(r, idx)
+}
+
 func addPath(r Repo, idx Index, p string, ignore IgnoreMatcher) error {
 	abs := filepath.Join(r.Root, cleanWorktreePath(p))
 	info, err := os.Stat(abs)

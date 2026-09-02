@@ -1,6 +1,7 @@
 # bdy local state and private cloud caches
 .bdy/
 .bdy-*/
+.bdynd/
 
 # Credentials, tokens, and local environment files
 .env

@@ -2,6 +2,7 @@ package bdynd
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"testing"
 )
@@ -27,5 +28,20 @@ func TestCloneFetchesAndChecksOutDefaultBranch(t *testing.T) {
 	}
 	if got := readFile(t, filepath.Join(dest, "readme.txt")); got != "hello\n" {
 		t.Fatalf("readme=%q", got)
+	}
+}
+
+func TestCloneRejectsNonEmptyDestination(t *testing.T) {
+	dest := filepath.Join(t.TempDir(), "clone")
+	if err := os.MkdirAll(dest, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(dest, "local.txt"), "keep\n")
+	_, err := Clone(context.Background(), newMemoryRemote(), "/apps/baiduyunStorage/nd/repos/demo", dest)
+	if err == nil {
+		t.Fatal("clone into non-empty destination unexpectedly succeeded")
+	}
+	if got := readFile(t, filepath.Join(dest, "local.txt")); got != "keep\n" {
+		t.Fatalf("local file changed: %q", got)
 	}
 }

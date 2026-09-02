@@ -22,6 +22,9 @@ func PushPacks(ctx context.Context, r Repo, remote RemoteStore, remoteRoot strin
 		return err
 	}
 	for _, pack := range packs {
+		if !ValidPackID(pack.ID) {
+			return fmt.Errorf("invalid pack id %q", pack.ID)
+		}
 		packPath := filepath.Join(packDir(r), pack.ID+".pack")
 		manifestPath := filepath.Join(packDir(r), pack.ID+".json")
 		if _, err := os.Stat(packPath); err != nil {
@@ -46,6 +49,9 @@ func FetchPacks(ctx context.Context, r Repo, remote RemoteStore, remoteRoot stri
 		if id == "" {
 			continue
 		}
+		if !ValidPackID(id) {
+			return fmt.Errorf("invalid pack id %q", id)
+		}
 		if err := downloadRemoteFile(ctx, remote, RemotePackManifestPath(remoteRoot, id), filepath.Join(packDir(r), id+".json")); err != nil {
 			return err
 		}
@@ -54,4 +60,25 @@ func FetchPacks(ctx context.Context, r Repo, remote RemoteStore, remoteRoot stri
 		}
 	}
 	return nil
+}
+
+func ValidPackID(id string) bool {
+	if len(id) != len("20060102150405-0123456789ab") || id[14] != '-' {
+		return false
+	}
+	for i, r := range id {
+		if i == 14 {
+			continue
+		}
+		if i < 14 {
+			if r < '0' || r > '9' {
+				return false
+			}
+			continue
+		}
+		if (r < '0' || r > '9') && (r < 'a' || r > 'f') {
+			return false
+		}
+	}
+	return true
 }

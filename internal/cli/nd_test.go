@@ -41,6 +41,34 @@ func TestBdyNDInitAddCommitLog(t *testing.T) {
 	}
 }
 
+func TestBdyNDIgnoreApplyRemovesIgnoredIndexEntries(t *testing.T) {
+	root := t.TempDir()
+	old, _ := os.Getwd()
+	t.Cleanup(func() { _ = os.Chdir(old) })
+	if err := os.Chdir(root); err != nil {
+		t.Fatal(err)
+	}
+	var out, errOut bytes.Buffer
+	mustRunCLI(t, []string{"nd", "init"}, &out, &errOut)
+	if err := os.WriteFile("debug.log", []byte("debug\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mustRunCLI(t, []string{"nd", "add", "debug.log"}, &out, &errOut)
+	if err := os.WriteFile(".bdyndignore", []byte("*.log\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	mustRunCLI(t, []string{"nd", "ignore", "apply"}, &out, &errOut)
+	if !strings.Contains(out.String(), "removed 1 ignored path") {
+		t.Fatalf("ignore output=%q", out.String())
+	}
+	out.Reset()
+	mustRunCLI(t, []string{"nd", "status"}, &out, &errOut)
+	if strings.Contains(out.String(), "debug.log") {
+		t.Fatalf("ignored path still in status=%q", out.String())
+	}
+}
+
 func TestBdyNDBranchSwitchTag(t *testing.T) {
 	root := t.TempDir()
 	old, _ := os.Getwd()
@@ -62,6 +90,63 @@ func TestBdyNDBranchSwitchTag(t *testing.T) {
 	mustRunCLI(t, []string{"nd", "branch"}, &out, &errOut)
 	if !strings.Contains(out.String(), "* feature") {
 		t.Fatalf("branch output=%q", out.String())
+	}
+	mustRunCLI(t, []string{"nd", "switch", "main"}, &out, &errOut)
+	out.Reset()
+	mustRunCLI(t, []string{"nd", "branch", "-d", "feature"}, &out, &errOut)
+	if !strings.Contains(out.String(), "deleted branch feature") {
+		t.Fatalf("branch delete output=%q", out.String())
+	}
+	mustRunCLI(t, []string{"nd", "tag", "-d", "v1"}, &out, &errOut)
+}
+
+func TestBdyNDGrepCleanAndCherryPick(t *testing.T) {
+	root := t.TempDir()
+	old, _ := os.Getwd()
+	t.Cleanup(func() { _ = os.Chdir(old) })
+	if err := os.Chdir(root); err != nil {
+		t.Fatal(err)
+	}
+	var out, errOut bytes.Buffer
+	mustRunCLI(t, []string{"nd", "init"}, &out, &errOut)
+	if err := os.WriteFile("note.txt", []byte("hello\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mustRunCLI(t, []string{"nd", "add", "note.txt"}, &out, &errOut)
+	mustRunCLI(t, []string{"nd", "commit", "-m", "base"}, &out, &errOut)
+	out.Reset()
+	mustRunCLI(t, []string{"nd", "grep", "hello"}, &out, &errOut)
+	if !strings.Contains(out.String(), "note.txt:1:hello") {
+		t.Fatalf("grep output=%q", out.String())
+	}
+	if err := os.WriteFile("scratch.txt", []byte("scratch\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	mustRunCLI(t, []string{"nd", "clean", "-n"}, &out, &errOut)
+	if !strings.Contains(out.String(), "would remove scratch.txt") {
+		t.Fatalf("clean dry-run output=%q", out.String())
+	}
+	mustRunCLI(t, []string{"nd", "clean"}, &out, &errOut)
+	if _, err := os.Stat("scratch.txt"); !os.IsNotExist(err) {
+		t.Fatalf("scratch still exists err=%v", err)
+	}
+
+	mustRunCLI(t, []string{"nd", "branch", "feature"}, &out, &errOut)
+	mustRunCLI(t, []string{"nd", "switch", "feature"}, &out, &errOut)
+	if err := os.WriteFile("feature.txt", []byte("feature\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mustRunCLI(t, []string{"nd", "add", "feature.txt"}, &out, &errOut)
+	mustRunCLI(t, []string{"nd", "commit", "-m", "feature"}, &out, &errOut)
+	mustRunCLI(t, []string{"nd", "switch", "main"}, &out, &errOut)
+	out.Reset()
+	mustRunCLI(t, []string{"nd", "cherry-pick", "feature"}, &out, &errOut)
+	if !strings.Contains(out.String(), "cherry-picked") {
+		t.Fatalf("cherry-pick output=%q", out.String())
+	}
+	if data, err := os.ReadFile("feature.txt"); err != nil || string(data) != "feature\n" {
+		t.Fatalf("feature file data=%q err=%v", data, err)
 	}
 }
 
