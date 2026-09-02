@@ -70,3 +70,16 @@ ok  baiduyunStorage/pkg/baidund
 A help text assertion was updated during verification so that the restored OAuth login help still includes the existing `SDK token` wording expected by the CLI tests. This preserves the dual auth model: OAuth device-code login and external SDK token import.
 
 No remote Baidu Netdisk mutation was required for this verification step.
+
+## 2026-09-02 全面成型验证（增量）
+
+timeline 分层快照数据库已从脚手架推进到闭环可用：
+
+- `Store` 新增生命周期方法：`VerifyBlock` / `RestoreNode` / `ReplayDeltas` / `BuildCheckpoint` / `UploadCheckpoint` / `Prune` / `RepackSegments` / `Status`（`internal/bdynd/timeline/lifecycle.go` + `db_query.go`）。
+- CLI 新增 `bdy nd timeline` 命令面：`init/status/verify/flush/repack/checkpoint/prune/restore`（`internal/cli/nd_timeline.go`），并接入临时只读策略（status/verify/restore 只读，其余写操作被阻止）。
+- `bdy nd commit` 自动调用 timeline sink（`ndCommitTimeline`）：commit 后节点自动落库。
+- 端到端验证（真实仓库 + 真实远端）：
+  - 单 commit：`timeline status` 显示 1 node + 1 active block；checkpoint 生成并校验通过；restore 还原出完整树。
+  - 多 commit（2 次改同一文件）：checkpoint --upload 上传真实远端成功，restore 最新 commit 返回最新树，verify 通过，远端数据清理。
+  - 5 commit：status 5 nodes，flush 0 pending，checkpoint 正常。
+- 全仓 `go test ./... -race` 全绿；行数检查通过。

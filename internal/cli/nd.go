@@ -54,6 +54,9 @@ func cmdND(ctx context.Context, args []string, out io.Writer) error {
 			return err
 		}
 		fmt.Fprintf(out, "[%s] %s\n", shortOID(c.OID), c.Message)
+		if err := ndCommitTimeline(ctx, r, c); err != nil {
+			return fmt.Errorf("timeline: %w", err)
+		}
 		return nil
 	case "log":
 		r, err := bdynd.Open(".")
@@ -187,6 +190,8 @@ func cmdND(ctx context.Context, args []string, out io.Writer) error {
 		return nil
 	case "lfs":
 		return cmdNDLFS(ctx, args[1:], out)
+	case "timeline":
+		return cmdNDTimeline(ctx, args[1:], out)
 	case "remote":
 		return cmdNDRemote(args[1:], out)
 	case "push", "fetch", "pull":

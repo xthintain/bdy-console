@@ -259,6 +259,11 @@ func temporaryReadOnlyAllowsND(args []string) bool {
 		return len(args) > 1 && oneOf(args[1], "fetch", "checkout", "status", "ls-files")
 	case "pack":
 		return len(args) > 1 && args[1] == "fetch"
+	case "timeline":
+		if len(args) < 2 {
+			return false
+		}
+		return oneOf(args[1], "status", "verify", "restore")
 	default:
 		return false
 	}

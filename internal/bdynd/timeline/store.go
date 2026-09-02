@@ -156,7 +156,10 @@ func (s *Store) BuildSegment(ctx context.Context, project string, nodes []NodeMe
 		return "", err
 	}
 	for _, n := range nodes {
-		if err := s.DB.RecordNode(n, segID); err != nil {
+		// Keep node.block_id pointing at the node's own flushed block so node
+		// restore can locate it directly. Segment membership is implied by the
+		// segment block's index, not by overwriting node location.
+		if err := s.DB.RecordNode(n, "node-"+n.CommitID); err != nil {
 			return "", err
 		}
 	}
@@ -249,6 +252,7 @@ func (s *Store) DownloadBlock(ctx context.Context, id string) (string, error) {
 func (s *Store) findLocalBlock(id string) string {
 	candidates := []string{
 		filepath.Join(s.Layout.ArchivesDir(), id+".pack.zst"),
+		filepath.Join(s.Layout.CheckpointsDir(), id+".pack.zst"),
 		filepath.Join(s.Layout.PendingDir(), id+".block"),
 		filepath.Join(s.Layout.CacheDir(), id+".pack"),
 	}

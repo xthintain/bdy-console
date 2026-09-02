@@ -213,6 +213,7 @@ Usage:
   bdy nd lfs fetch
   bdy nd lfs checkout
   bdy nd lfs pull
+  bdy nd timeline init|status|verify|flush|repack|checkpoint|prune|restore
 
 Repository:
   .bdynd/
