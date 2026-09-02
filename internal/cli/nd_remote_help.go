@@ -43,24 +43,57 @@ func (s ndRemoteStore) UploadFile(ctx context.Context, localPath, remotePath str
 func (s ndRemoteStore) DownloadFile(ctx context.Context, remotePath, localPath string) error {
 	parent := filepath.ToSlash(filepath.Dir(remotePath))
 	name := filepath.Base(remotePath)
+	// List may return an empty result for deep directories (Baidu PCS
+	// limitation); fall back to search which indexes the same tree.
 	items, err := s.client.List(ctx, parent)
 	if err != nil {
 		return err
 	}
-	for _, item := range items {
-		if item.Path != remotePath && item.ServerFilename != name {
-			continue
+	var item *baidu.FileEntry
+	for i := range items {
+		if items[i].Path == remotePath || items[i].ServerFilename == name {
+			item = &items[i]
+			break
 		}
-		meta, err := s.client.FileMetas(ctx, []uint64{item.FSID}, true)
-		if err != nil {
-			return err
-		}
-		if len(meta) == 0 || meta[0].DLink == "" {
-			return fmt.Errorf("missing dlink for %s", remotePath)
-		}
-		return s.client.Download(ctx, meta[0].DLink, localPath)
 	}
-	return os.ErrNotExist
+	if item == nil {
+		// Fall back to a targeted search from the remote root.
+		root := remoteRootOf(remotePath)
+		hits, serr := s.client.Search(ctx, baidu.SearchOptions{Dir: root, Key: name}, 1)
+		if serr == nil {
+			for i := range hits {
+				if hits[i].Path == remotePath {
+					item = &hits[i]
+					break
+				}
+			}
+		}
+	}
+	if item == nil {
+		return os.ErrNotExist
+	}
+	meta, err := s.client.FileMetas(ctx, []uint64{item.FSID}, true)
+	if err != nil {
+		return err
+	}
+	if len(meta) == 0 || meta[0].DLink == "" {
+		return fmt.Errorf("missing dlink for %s", remotePath)
+	}
+	return s.client.Download(ctx, meta[0].DLink, localPath)
+}
+
+// remoteRootOf returns the deepest existing root used to scope a fallback
+// search. It is a conservative heuristic: the object tree root is the segment
+// up to the third path component under the repo root.
+func remoteRootOf(remotePath string) string {
+	// e.g. /apps/baiduyunStorage/nd/repos/<repo>/objects/... -> repo root
+	parts := strings.Split(strings.Trim(remotePath, "/"), "/")
+	// /apps/baiduyunStorage/nd/repos/<repo> = 6 leading segments after repo root
+	const lead = 6
+	if len(parts) > lead {
+		return "/" + strings.Join(parts[:lead], "/")
+	}
+	return "/apps/baiduyunStorage"
 }
 
 func (s ndRemoteStore) Exists(ctx context.Context, remotePath string) (bool, error) {
@@ -73,6 +106,16 @@ func (s ndRemoteStore) Exists(ctx context.Context, remotePath string) (bool, err
 	for _, item := range items {
 		if item.Path == remotePath || item.ServerFilename == name {
 			return true, nil
+		}
+	}
+	// Deep directories may not show in List; search fallback.
+	root := remoteRootOf(remotePath)
+	hits, serr := s.client.Search(ctx, baidu.SearchOptions{Dir: root, Key: name}, 1)
+	if serr == nil {
+		for _, it := range hits {
+			if it.Path == remotePath {
+				return true, nil
+			}
 		}
 	}
 	return false, nil
